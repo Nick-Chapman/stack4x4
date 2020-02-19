@@ -2,7 +2,7 @@
 
 Plan: Use RL (_Reinforcement Learning_) to play Stack 4x4.
 
-- [Live demo](https://github.com/Nick-Chapman/stack4x4)
+- [Live demo](https://nick-chapman.github.io/stack4x4)
 
 Also a driving example for my first explorations into the world of front-end development:
 
