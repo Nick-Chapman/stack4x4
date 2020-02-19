@@ -1,9 +1,19 @@
 
 html {
-  font-size: 16px;
-  font-family: "Kalam";
+    font-size: 16px;
+    font-family: "Kalam";
 }
 
 em {
-  color: red;
+    color: red;
+}
+
+.cell {
+    height: 50px;
+    width: 50px;
+    float: left;
+}
+
+.break {
+    height: 50px;
 }
