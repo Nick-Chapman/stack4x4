@@ -25,17 +25,22 @@ function init() {
         for(let j = 0; j < size; j++) {
             let pos = [i,j]
             const canvas = document.createElement('canvas')
+            gridTag.appendChild(canvas)
             canvas.width = 50
             canvas.height = 50
             canvas.setAttribute('class','cell')
             canvas.onclick = click(s,pos)
             canvas.onmouseover = mouseOver(s,pos)
             canvas.onmouseout = mouseOut(s,pos)
-            gridTag.appendChild(canvas)
+            if ((i+j) % 2 === 0) {
+                canvas.style.backgroundColor = dark
+            } else {
+                canvas.style.backgroundColor = light
+            }
             cell = { }
-            cell.canvas = canvas
-            cell.player = 0;
             board[i*size+j] = cell
+            cell.player = 0;
+            cell.canvas = canvas
             cell.ctx = canvas.getContext('2d')
         }
         const lineBreak = document.createElement('div')
@@ -96,11 +101,6 @@ function redraw(s) {
             const canvas = cell.canvas
             const ctx = cell.ctx
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if ((i+j) % 2 === 0) {
-                canvas.style.backgroundColor = dark
-            } else {
-                canvas.style.backgroundColor = light
-            }
             if (cell.player === 0) {
                 if (hover && !finished) {
                     if (isLegalMove(s,hover)) {
