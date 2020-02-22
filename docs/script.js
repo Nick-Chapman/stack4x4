@@ -1,49 +1,91 @@
 
-const black = 'rgb(0,0,0)'
-const grey = 'rgb(200,200,200)'
+const dark = 'rgb(130,130,130)'
+const light = 'rgb(170,170,170)'
+
+const purple = 'rgb(137,52,235)'
+const green = 'rgb(83,225,56)'
 
 const size = 8
 
-let board = [];
-
-init()
-reset()
+let board = []
+let lastCell = '??'
+let nextPlayer = 1
 
 function init() {
+
     for(let i = 0; i < size ; i++) {
-        board[i] = [];
         for(let j = 0; j < size; j++) {
-            const cell = document.createElement('div');
-            cell.setAttribute('class','cell')
-            cell.onclick = changeBgCol;
-            board[i][j] = cell;
-            document.body.appendChild(cell);
+            const canvas = document.createElement('canvas')
+            canvas.width = 50
+            canvas.height = 50
+            canvas.setAttribute('class','cell')
+            canvas.onclick = onClick(i,j)
+            document.body.appendChild(canvas)
+            cell = { }
+            cell.canvas = canvas
+            cell.player = 0;
+            cell.name = cellName(i,j)
+            board[i*size+j] = cell
+            cell.ctx = canvas.getContext('2d')
         }
-        const lineBreak = document.createElement('div');
+        const lineBreak = document.createElement('div')
         lineBreak.setAttribute('class','break')
-        document.body.appendChild(lineBreak);
+        document.body.appendChild(lineBreak)
     }
-    document.getElementById('reset').onclick = reset;
+    document.getElementById('reset').onclick = reset
 }
 
 function reset() {
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
-            cell = board[i][j]
+            let cell = board[i*size+j]
+            cell.player = 0
+        }
+    }
+    redraw()
+}
+
+function drawPiece(ctx,color) {
+    ctx.beginPath()
+    ctx.fillStyle = color
+    ctx.arc (25, 25, 20, 0, 2 * Math.PI)
+    ctx.fill()
+}
+
+function redraw() {
+    document.getElementById('last').textContent = lastCell
+    for(let i = 0; i < size ; i++) {
+        for(let j = 0; j < size; j++) {
+            let cell = board[i*size+j]
+            const canvas = cell.canvas
+            const ctx = cell.ctx
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             if ((i+j) % 2 === 0) {
-                cell.style.backgroundColor = black
+                canvas.style.backgroundColor = dark
             } else {
-                cell.style.backgroundColor = grey
+                canvas.style.backgroundColor = light
+            }
+            if (cell.player === 1) {
+                drawPiece(ctx,purple)
+            }
+            if (cell.player === 2) {
+                drawPiece(ctx,green)
             }
         }
     }
 }
 
-function changeBgCol(e) {
-    const col = 'rgb(' + random(255) + ',' + random(255) + ',' + random(255) + ')';
-    e.target.style.backgroundColor = col;
+function cellName(i,j) {
+    return String.fromCharCode(65 + j) + String(size-i)
 }
 
-function random(number) {
-    return Math.floor(Math.random() * number);
-}
+function onClick(i,j) { return function(e) {
+    let cell = board[i*size+j]
+    cell.player = nextPlayer
+    lastCell = cellName(i,j)
+    nextPlayer = 3-nextPlayer;
+    redraw()
+}}
+
+init()
+reset()

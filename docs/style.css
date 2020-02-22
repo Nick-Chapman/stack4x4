@@ -4,10 +4,6 @@ html {
     font-family: "Kalam";
 }
 
-em {
-    color: red;
-}
-
 .cell {
     height: 50px;
     width: 50px;
