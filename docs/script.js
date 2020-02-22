@@ -12,6 +12,9 @@ let lastCell = '??'
 let nextPlayer = 1
 let hover
 
+init()
+reset()
+
 function init() {
 
     for(let i = 0; i < size ; i++) {
@@ -72,17 +75,21 @@ function redraw() {
             } else {
                 canvas.style.backgroundColor = light
             }
+            if (cell.player === 0) {
+                if (hover) {
+                    if (isLegalMove(hover)) {
+                        let [hi,hj] = hover
+                        if (hi === i && hj === j) {
+                            drawPiece(ctx,white)
+                        }
+                    }
+                }
+            }
             if (cell.player === 1) {
                 drawPiece(ctx,purple)
             }
             if (cell.player === 2) {
                 drawPiece(ctx,green)
-            }
-            if (hover) {
-                let [hi,hj] = hover
-                if (hi === i && hj === j) {
-                    drawPiece(ctx,white)
-                }
             }
         }
     }
@@ -93,12 +100,46 @@ function cellName(i,j) {
 }
 
 function onClick(i,j) { return function(e) {
-    let cell = board[i*size+j]
-    cell.player = nextPlayer
-    lastCell = cellName(i,j)
-    nextPlayer = 3-nextPlayer;
-    redraw()
+    //let cell = board[i*size+j]
+    let pos = [i,j]
+    if (isLegalMove(pos)) {
+        let cell = getCell(pos)
+        cell.player = nextPlayer
+        lastCell = cellName(i,j)
+        nextPlayer = 3-nextPlayer;
+        redraw()
+    }
 }}
 
-init()
-reset()
+function isLegalMove(pos) {
+    return empty(pos) && supported(pos)
+}
+
+function empty(pos) {
+    return playerAt(pos) === 0
+}
+
+function supported(pos) {
+    let [i,j] = pos
+    return (pillarX(0,i-1,j) || pillarX(i+1,size-1,j) ||
+            pillarY(i,0,j-1) || pillarY(i,j+1,size-1))
+}
+
+function pillarX(x1,x2,y) {
+    if (x1 > x2) return true
+    else return !empty([x1,y]) && pillarX(x1+1,x2,y)
+}
+
+function pillarY(x,y1,y2) {
+    if (y1 > y2) return true
+    else return !empty([x,y1]) && pillarY(x,y1+1,y2)
+}
+
+function playerAt(pos) {
+    return getCell(pos).player
+}
+
+function getCell(pos) {
+    let [i,j] = pos
+    return board[i*size+j]
+}
