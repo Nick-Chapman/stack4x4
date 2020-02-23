@@ -9,11 +9,11 @@ em {
 }
 
 .cell {
-    height: 50px;
-    width: 50px;
+    height: 100px;
+    width: 100px;
     float: left;
 }
 
 .break {
-    height: 50px;
+    height: 100px;
 }

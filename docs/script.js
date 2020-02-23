@@ -55,6 +55,8 @@ function disableUI(s,bool) {
     }
 }
 
+const canvasSize = 100
+
 function createState() {
     const info = 'creating'
     const hover = undefined
@@ -71,8 +73,8 @@ function createState() {
             const pos = [i,j]
             const canvas = document.createElement('canvas')
             gridTag.appendChild(canvas)
-            canvas.width = 50
-            canvas.height = 50
+            canvas.width = canvasSize
+            canvas.height = canvasSize
             canvas.setAttribute('class','cell')
             canvas.onclick = moveAtPositionAndUpdate(s,pos)
             canvas.onmouseover = mouseOver(s,pos)
@@ -183,18 +185,21 @@ function reset(s) { return function() {
 }}
 
 function drawPiece(ctx,color) {
+    const m = canvasSize/2
+    const size = m*4/5
     ctx.beginPath()
     ctx.fillStyle = color
-    ctx.arc (25, 25, 20, 0, 2 * Math.PI)
+    ctx.arc (m, m, size, 0, 2*Math.PI)
     ctx.fill()
 }
 
 function drawCircle(ctx,color,thickness) {
-    const size = (25*4/5) - thickness/2
+    const m = canvasSize/2
+    const size = m*4/5 - thickness/2
     ctx.beginPath()
     ctx.lineWidth = thickness
     ctx.strokeStyle = color
-    ctx.arc (25, 25, size, 0, 2 * Math.PI)
+    ctx.arc (m, m, size, 0, 2*Math.PI)
     ctx.stroke()
 }
 
