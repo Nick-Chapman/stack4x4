@@ -9,20 +9,23 @@ const green = 'rgb(83,225,56)'
 const size = 8
 const winLineLength = 4
 
-const initialMoves = [[7,3],[6,3],[4,0]]
-
 init()
 
 function init() {
     const s = createState()
-    setup(s,initialMoves)
+    const moves = JSON.parse(localStorage.getItem('SavedMoves'))
+    if (moves) setup(s,moves)
     redraw(s)
+}
+
+function saveState(s) {
+    localStorage.setItem('SavedMoves',JSON.stringify(s.moves))
 }
 
 function setup(s,moves) {
     for(let i = 0; i < moves.length ; i++) {
         const pos = moves[i]
-        moveAtPosition(s,pos)()
+        moveAtPosition(s,pos)
     }
 }
 
@@ -44,7 +47,7 @@ function createState() {
             canvas.width = 50
             canvas.height = 50
             canvas.setAttribute('class','cell')
-            canvas.onclick = moveAtPosition(s,pos)
+            canvas.onclick = moveAtPositionAndUpdate(s,pos)
             canvas.onmouseover = mouseOver(s,pos)
             canvas.onmouseout = mouseOut(s,pos)
             if ((i+j) % 2 === 0) {
@@ -77,6 +80,7 @@ function reset(s) { return function() {
         }
     }
     redraw(s)
+    saveState(s)
 }}
 
 function drawPiece(ctx,color) {
@@ -179,16 +183,21 @@ function mouseOut(s,pos) { return function() {
     redraw(s)
 }}
 
-function moveAtPosition(s,pos) { return function() {
+function moveAtPositionAndUpdate(s,pos) { return function() {
+    moveAtPosition(s,pos)
+    redraw(s)
+    saveState(s)
+}}
+
+function moveAtPosition(s,pos) {
     const { moves, nextPlayer } = s
     if (isLegalMove(s,pos)) {
         cellAt(s,pos).player = nextPlayer
         s.nextPlayer = otherPlayer(nextPlayer);
         s.winByLastPlayer = isWinline(s,pos,nextPlayer)
         s.moves.push(pos)
-        redraw(s)
     }
-}}
+}
 
 function undoLastMove(s) { return function() {
     const { moves, nextPlayer } = s
@@ -198,6 +207,7 @@ function undoLastMove(s) { return function() {
         s.nextPlayer = otherPlayer(nextPlayer);
         s.winByLastPlayer = false
         redraw(s)
+        saveState(s)
     }
 }}
 
