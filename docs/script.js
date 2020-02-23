@@ -114,6 +114,7 @@ function moveAtPositionAndUpdate(s,pos) { return function() {
         moveAtPosition(s,pos)
         redraw(s)
         saveState(s)
+        checkHumanOrAI(s)
     }
 }}
 
@@ -121,7 +122,50 @@ function undoLastMoveAndUpdate(s) { return function() {
     undoLastMove(s)
     redraw(s)
     saveState(s)
+    checkHumanOrAI(s)
 }}
+
+
+function checkHumanOrAI(s) {
+    if (isAI(s.nextPlayer)) {
+        if (!gameOver(s)) {
+            disableUI(s,true)
+            runAI(s)
+        }
+    }
+}
+
+function runAI(s) {
+    s.info = 'AI running...'
+    redraw(s)
+    pauseThen(200,() => {
+        const moves = allLegalMoves(s)
+        s.info = 'AI running... #legalMoves = ' + String(moves.length)
+        redraw(s)
+        pauseThen(200,() => {
+            const pos = moves[random(moves.length)]
+            s.info = 'AI running... choosing = ' + String(cellName(pos))
+            redraw(s)
+            pauseThen(200,() => {
+                moveAtPosition(s,pos)
+                s.info = 'Back to human'
+                disableUI(s,false)
+                redraw(s)
+                saveState(s)
+            })
+        })
+    })
+}
+
+function random(number) {
+    return Math.floor(Math.random() * number);
+}
+
+
+function isAI(player) {
+    // for now, hard code as player 2 is always AI
+    return player === 2
+}
 
 function reset(s) { return function() {
     s.hover = undefined
@@ -135,7 +179,7 @@ function reset(s) { return function() {
         }
     }
     redraw(s)
-    //saveState(s)
+    saveState(s)
 }}
 
 function drawPiece(ctx,color) {
@@ -213,7 +257,7 @@ function redrawMoveList(s) {
 
 function redraw(s) {
     const {hover, nextPlayer, board} = s
-    //redrawInfo(s)
+    redrawInfo(s)
     redrawStatus(s)
     redrawMoveList(s)
     const finished = gameOver(s)
@@ -277,6 +321,7 @@ function allLegalMoves(s) {
             }
         }
     }
+    return acc
 }
 
 function isLegalMove(s,pos) {
