@@ -9,35 +9,62 @@ const green = 'rgb(83,225,56)'
 const size = 8
 const winLineLength = 4
 
-init()
-
-function init() {
-    const s = createState()
-    const moves = JSON.parse(localStorage.getItem('SavedMoves'))
-    if (moves) setup(s,moves)
-    redraw(s)
+function pauseThen(ms,f) {
+    setTimeout(f,ms)
 }
 
 function saveState(s) {
     localStorage.setItem('SavedMoves',JSON.stringify(s.moves))
 }
 
-function setup(s,moves) {
-    for(let i = 0; i < moves.length ; i++) {
-        const pos = moves[i]
-        moveAtPosition(s,pos)
+function init() {
+    const s = createState()
+    const moves = JSON.parse(localStorage.getItem('SavedMoves'))
+    if (moves) {
+        disableUI(s,true)
+        restoreState(s,moves,0)
+    }
+    redraw(s)
+}
+
+function restoreState(s,moves,i) {
+    s.info = 'setup'
+    if (i < moves.length) {
+        const totalDuration = 200 * Math.sqrt(moves.length)
+        const duration = totalDuration / moves.length
+        pauseThen(duration,() => {
+            const pos = moves[i]
+            moveAtPosition(s,pos)
+            redraw(s)
+            restoreState(s,moves,i+1)
+        })
+    } else {
+        s.info = 'play'
+        redraw(s)
+        disableUI(s,false)
+    }
+}
+
+const buttonLabels = ['Reset','Undo']
+
+function disableUI(s,bool) {
+    s.disabled = bool
+    for (let i = 0; i < buttonLabels.length; i++) {
+        const name = buttonLabels[i]
+        document.getElementById(name).disabled = bool
     }
 }
 
 function createState() {
+    const info = 'creating'
     const hover = undefined
     const nextPlayer = 1
     const winByLastPlayer = false
     const board = []
     const moves = []
-    s = { hover, nextPlayer, winByLastPlayer, board, moves }
+    s = { info, hover, nextPlayer, winByLastPlayer, board, moves }
     document.getElementById('Reset').onclick = reset(s)
-    document.getElementById('Undo').onclick = undoLastMove(s)
+    document.getElementById('Undo').onclick = undoLastMoveAndUpdate(s)
     gridTag = document.getElementById('GridTag')
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -68,6 +95,34 @@ function createState() {
     return s
 }
 
+function mouseOver(s,pos) { return function() {
+    if (!s.disabled) {
+        s.hover = pos
+        redraw(s)
+    }
+}}
+
+function mouseOut(s,pos) { return function() {
+    if (!s.disabled) {
+        s.hover = undefined
+        redraw(s)
+    }
+}}
+
+function moveAtPositionAndUpdate(s,pos) { return function() {
+    if (!s.disabled) {
+        moveAtPosition(s,pos)
+        redraw(s)
+        saveState(s)
+    }
+}}
+
+function undoLastMoveAndUpdate(s) { return function() {
+    undoLastMove(s)
+    redraw(s)
+    saveState(s)
+}}
+
 function reset(s) { return function() {
     s.hover = undefined
     s.nextPlayer = 1
@@ -80,7 +135,7 @@ function reset(s) { return function() {
         }
     }
     redraw(s)
-    saveState(s)
+    //saveState(s)
 }}
 
 function drawPiece(ctx,color) {
@@ -107,6 +162,11 @@ function drawCircleSolid(ctx,color,thickness) {
 function drawCircleDashed(ctx,color,thickness) {
     ctx.setLineDash([1,2])
     drawCircle(ctx,color,thickness)
+}
+
+function redrawInfo(s) {
+    const p = document.getElementById('Info')
+    p.textContent = s.info
 }
 
 function redrawStatus(s) {
@@ -153,6 +213,7 @@ function redrawMoveList(s) {
 
 function redraw(s) {
     const {hover, nextPlayer, board} = s
+    //redrawInfo(s)
     redrawStatus(s)
     redrawMoveList(s)
     const finished = gameOver(s)
@@ -186,22 +247,6 @@ function colourOfPlayer(player) {
     alert("colourOfPlayer!")
 }
 
-function mouseOver(s,pos) { return function() {
-    s.hover = pos
-    redraw(s)
-}}
-
-function mouseOut(s,pos) { return function() {
-    s.hover = undefined
-    redraw(s)
-}}
-
-function moveAtPositionAndUpdate(s,pos) { return function() {
-    moveAtPosition(s,pos)
-    redraw(s)
-    saveState(s)
-}}
-
 function moveAtPosition(s,pos) {
     const { moves, nextPlayer } = s
     if (isLegalMove(s,pos)) {
@@ -212,18 +257,15 @@ function moveAtPosition(s,pos) {
     }
 }
 
-function undoLastMove(s) { return function() {
+function undoLastMove(s) {
     const { moves, nextPlayer } = s
     if (s.moves.length > 0) {
         const pos = s.moves.pop()
         cellAt(s,pos).player = 0
         s.nextPlayer = otherPlayer(nextPlayer);
         s.winByLastPlayer = false
-        redraw(s)
-        saveState(s)
     }
-}}
-
+}
 
 function allLegalMoves(s) {
     var acc = []
@@ -326,3 +368,5 @@ function eqPos(pos1,pos2) {
 function otherPlayer(player) {
     return 3 - player
 }
+
+init()
