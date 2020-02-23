@@ -4,7 +4,7 @@ const white = 'rgb(255,255,255)'
 const dark = 'rgb(140,140,140)'
 const light = 'rgb(160,160,160)'
 const purple = 'rgb(137,52,235)'
-const green = 'rgb(83,225,56)'
+const green = 'rgb(25,170,25)'
 
 const size = 8
 const winLineLength = 4
@@ -18,17 +18,16 @@ function saveState(s) {
 }
 
 function init() {
-    const s = createState()
+    const s = newState()
+    setupDOM(s)
     const moves = JSON.parse(localStorage.getItem('SavedMoves'))
     if (moves) {
         disableUI(s,true)
         restoreState(s,moves,0)
     }
-    redraw(s)
 }
 
 function restoreState(s,moves,i) {
-    s.info = 'setup'
     if (i < moves.length) {
         const totalDuration = 200 * Math.sqrt(moves.length)
         const duration = totalDuration / moves.length
@@ -39,13 +38,12 @@ function restoreState(s,moves,i) {
             restoreState(s,moves,i+1)
         })
     } else {
-        s.info = 'play'
-        redraw(s)
         disableUI(s,false)
+        endOfInteraction(s)
     }
 }
 
-const buttonLabels = ['Reset','Undo']
+const buttonLabels = ['NewGame','Undo','Undo2']
 
 function disableUI(s,bool) {
     s.disabled = bool
@@ -57,16 +55,13 @@ function disableUI(s,bool) {
 
 const canvasSize = 100
 
-function createState() {
-    const info = 'creating'
-    const hover = undefined
-    const nextPlayer = 1
-    const winByLastPlayer = false
-    const board = []
-    const moves = []
-    s = { info, hover, nextPlayer, winByLastPlayer, board, moves }
-    document.getElementById('Reset').onclick = reset(s)
+function setupDOM(s) {
+    document.getElementById('NewGame').onclick = newGame(s)
     document.getElementById('Undo').onclick = undoLastMoveAndUpdate(s)
+    document.getElementById('Undo2').onclick = undoTwoLastMovesAndUpdate(s)
+    document.getElementById('Player1switch').onclick = switchP1(s)
+    document.getElementById('Player2switch').onclick = switchP2(s)
+    document.getElementById('SwitchPlayers').onclick = switchBothPlayers(s)
     gridTag = document.getElementById('GridTag')
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -85,7 +80,7 @@ function createState() {
                 canvas.style.backgroundColor = light
             }
             cell = { }
-            board[i*size+j] = cell
+            s.board[i*size+j] = cell
             cell.player = 0;
             cell.canvas = canvas
             cell.ctx = canvas.getContext('2d')
@@ -111,25 +106,54 @@ function mouseOut(s,pos) { return function() {
     }
 }}
 
+function switchP1(s) { return function() {
+    if (!s.disabled) {
+        s.player1isAI = !s.player1isAI
+        endOfInteraction(s)
+    }
+}}
+
+function switchP2(s) { return function() {
+    if (!s.disabled) {
+        s.player2isAI = !s.player2isAI
+        endOfInteraction(s)
+    }
+}}
+
+function switchBothPlayers(s) { return function() {
+    if (!s.disabled) {
+        s.player1isAI = !s.player1isAI
+        s.player2isAI = !s.player2isAI
+        endOfInteraction(s)
+    }
+}}
+
 function moveAtPositionAndUpdate(s,pos) { return function() {
     if (!s.disabled) {
         moveAtPosition(s,pos)
-        redraw(s)
-        saveState(s)
-        checkHumanOrAI(s)
+        endOfInteraction(s)
     }
+}}
+
+function newGame(s) { return function() {
+    resetState(s)
+    endOfInteraction(s)
 }}
 
 function undoLastMoveAndUpdate(s) { return function() {
     undoLastMove(s)
-    redraw(s)
-    saveState(s)
-    checkHumanOrAI(s)
+    endOfInteraction(s)
+}}
+
+function undoTwoLastMovesAndUpdate(s) { return function() {
+    undoLastMove(s)
+    undoLastMove(s)
+    endOfInteraction(s)
 }}
 
 
 function checkHumanOrAI(s) {
-    if (isAI(s.nextPlayer)) {
+    if (isPlayerAI(s,s.nextPlayer)) {
         if (!gameOver(s)) {
             disableUI(s,true)
             runAI(s)
@@ -138,38 +162,47 @@ function checkHumanOrAI(s) {
 }
 
 function runAI(s) {
-    s.info = 'AI running...'
     redraw(s)
     pauseThen(200,() => {
         const moves = allLegalMoves(s)
-        s.info = 'AI running... #legalMoves = ' + String(moves.length)
         redraw(s)
         pauseThen(200,() => {
             const pos = moves[random(moves.length)]
-            s.info = 'AI running... choosing = ' + String(cellName(pos))
             redraw(s)
             pauseThen(200,() => {
                 moveAtPosition(s,pos)
-                s.info = 'Back to human'
                 disableUI(s,false)
-                redraw(s)
-                saveState(s)
+                endOfInteraction(s)
             })
         })
     })
+}
+
+function endOfInteraction(s) {
+    redraw(s)
+    saveState(s)
+    checkHumanOrAI(s)
 }
 
 function random(number) {
     return Math.floor(Math.random() * number);
 }
 
-
-function isAI(player) {
-    // for now, hard code as player 2 is always AI
-    return player === 2
+function newState() {
+    const hover = undefined
+    const nextPlayer = 1
+    const winByLastPlayer = false
+    const board = []
+    const moves = []
+    const player1isAI = false
+    const player2isAI = true
+    s = { hover, nextPlayer, winByLastPlayer, board, moves,
+          player1isAI, player2isAI
+        }
+    return s
 }
 
-function reset(s) { return function() {
+function resetState(s) {
     s.hover = undefined
     s.nextPlayer = 1
     s.winByLastPlayer = false
@@ -180,9 +213,7 @@ function reset(s) { return function() {
             cellAt(s,pos).player = 0
         }
     }
-    redraw(s)
-    saveState(s)
-}}
+}
 
 function drawPiece(ctx,color) {
     const m = canvasSize/2
@@ -213,9 +244,12 @@ function drawCircleDashed(ctx,color,thickness) {
     drawCircle(ctx,color,thickness)
 }
 
-function redrawInfo(s) {
-    const p = document.getElementById('Info')
-    p.textContent = s.info
+function playerKindName(isAI) {
+    return isAI ? "AI" : "Human"
+}
+
+function playerName(s,player) {
+    return 'Player-' + String(player)
 }
 
 function redrawStatus(s) {
@@ -225,14 +259,15 @@ function redrawStatus(s) {
         if (winByLastPlayer) {
             lastPlayer = otherPlayer(nextPlayer)
             p.style.color = colourOfPlayer(lastPlayer)
-            p.textContent = 'Game Over. Player-' + String(lastPlayer) + ' wins!'
+            p.textContent = 'Game Over. ' + playerName(s,lastPlayer) + ' wins!'
         } else {
             p.style.color = black
             p.textContent = 'Game Over. Draw'
         }
     } else {
         p.style.color = colourOfPlayer(nextPlayer)
-        p.textContent = 'Player-' + String(nextPlayer) + ' to move.'
+        p.textContent = (playerName(s,nextPlayer) + ' to move (' +
+                         playerKindName(isPlayerAI(s,nextPlayer)) + ')')
     }
 }
 
@@ -260,11 +295,18 @@ function redrawMoveList(s) {
     }
 }
 
+function redrawPlayerInfo(s) {
+    const p1 = document.getElementById('Player1')
+    const p2 = document.getElementById('Player2')
+    p1.textContent = "P1 is " + playerKindName(s.player1isAI)
+    p2.textContent = "P2 is " + playerKindName(s.player2isAI)
+}
+
 function redraw(s) {
     const {hover, nextPlayer, board} = s
-    redrawInfo(s)
     redrawStatus(s)
     redrawMoveList(s)
+    redrawPlayerInfo(s)
     const finished = gameOver(s)
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -288,6 +330,12 @@ function redraw(s) {
             }
         }
     }
+}
+
+function isPlayerAI(s,player) {
+    if (player === 1) return s.player1isAI
+    if (player === 2) return s.player2isAI
+    alert("isPlayerAI!")
 }
 
 function colourOfPlayer(player) {
