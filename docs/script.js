@@ -9,27 +9,42 @@ const green = 'rgb(83,225,56)'
 const size = 8
 const winLineLength = 4
 
+const initialMoves = [[7,3],[6,3],[4,0]]
+
 init()
 
 function init() {
+    const s = createState()
+    setup(s,initialMoves)
+    redraw(s)
+}
+
+function setup(s,moves) {
+    for(let i = 0; i < moves.length ; i++) {
+        const pos = moves[i]
+        moveAtPosition(s,pos)()
+    }
+}
+
+function createState() {
     const hover = undefined
-    const lastPos = undefined
     const nextPlayer = 1
     const winByLastPlayer = false
-    const moveNumber = 1
     const board = []
-    s = { hover, lastPos, nextPlayer, winByLastPlayer, moveNumber, board }
-    document.getElementById('reset').onclick = reset(s)
+    const moves = []
+    s = { hover, nextPlayer, winByLastPlayer, board, moves }
+    document.getElementById('Reset').onclick = reset(s)
+    document.getElementById('Undo').onclick = undoLastMove(s)
     gridTag = document.getElementById('GridTag')
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
-            let pos = [i,j]
+            const pos = [i,j]
             const canvas = document.createElement('canvas')
             gridTag.appendChild(canvas)
             canvas.width = 50
             canvas.height = 50
             canvas.setAttribute('class','cell')
-            canvas.onclick = click(s,pos)
+            canvas.onclick = moveAtPosition(s,pos)
             canvas.onmouseover = mouseOver(s,pos)
             canvas.onmouseout = mouseOut(s,pos)
             if ((i+j) % 2 === 0) {
@@ -47,8 +62,22 @@ function init() {
         lineBreak.setAttribute('class','break')
         gridTag.appendChild(lineBreak)
     }
-    redraw(s)
+    return s
 }
+
+function reset(s) { return function() {
+    s.hover = undefined
+    s.nextPlayer = 1
+    s.winByLastPlayer = false
+    s.moves = []
+    for(let i = 0; i < size ; i++) {
+        for(let j = 0; j < size; j++) {
+            const pos = [i,j]
+            cellAt(s,pos).player = 0
+        }
+    }
+    redraw(s)
+}}
 
 function drawPiece(ctx,color) {
     ctx.beginPath()
@@ -83,17 +112,34 @@ function redrawStatus(s) {
     }
 }
 
-function redrawLastCellName(s) {
-    const {lastPos} = s
-    const p = document.getElementById('Last')
-    p.textContent = lastPos ? cellName(lastPos) : '??'
+function createMoveText(player,pos) {
+    const p = document.createElement('span')
+    p.style.color = colourOfPlayer(player)
+    p.textContent = ' ' + cellName(pos)
+    return p
+}
 
+function removeAllChildren(node) {
+    while(node.lastChild) {
+        node.removeChild(node.lastChild)
+    }
+}
+
+function redrawMoveList(s) {
+    const p = document.getElementById('Moves')
+    removeAllChildren(p)
+    var player = 1
+    for (let i = 0; i < s.moves.length; i++) {
+        const pos = s.moves[i]
+        p.appendChild(createMoveText(player,pos))
+        player = otherPlayer(player)
+    }
 }
 
 function redraw(s) {
     const {hover, nextPlayer, board} = s
-    redrawLastCellName(s)
     redrawStatus(s)
+    redrawMoveList(s)
     const finished = gameOver(s)
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -123,53 +169,45 @@ function colourOfPlayer(player) {
     alert("colourOfPlayer!")
 }
 
-function reset(s) { return function() {
-    s.hover = undefined
-    s.lastPos = undefined
-    s.nextPlayer = 1
-    s.winByLastPlayer = false
-    s.moveNumber = 1
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            cellAt(s,pos).player = 0
-        }
-    }
-    redraw(s)
-}}
-
-function mouseOver(s,pos) { return function(e) {
+function mouseOver(s,pos) { return function() {
     s.hover = pos
     redraw(s)
 }}
 
-function mouseOut(s,pos) { return function(e) {
+function mouseOut(s,pos) { return function() {
     s.hover = undefined
     redraw(s)
 }}
 
-function click(s,pos) { return function(e) {
-    const { nextPlayer } = s
+function moveAtPosition(s,pos) { return function() {
+    const { moves, nextPlayer } = s
     if (isLegalMove(s,pos)) {
-        s.moveNumber ++
         cellAt(s,pos).player = nextPlayer
-        s.lastPos = pos
         s.nextPlayer = otherPlayer(nextPlayer);
         s.winByLastPlayer = isWinline(s,pos,nextPlayer)
+        s.moves.push(pos)
         redraw(s)
     }
 }}
 
-function otherPlayer(player) {
-    return 3 - player
-}
+function undoLastMove(s) { return function() {
+    const { moves, nextPlayer } = s
+    if (s.moves.length > 0) {
+        const pos = s.moves.pop()
+        cellAt(s,pos).player = 0
+        s.nextPlayer = otherPlayer(nextPlayer);
+        s.winByLastPlayer = false
+        redraw(s)
+    }
+}}
+
 
 function isLegalMove(s,pos) {
     return !gameOver(s) && empty(s,pos) && supported(s,pos)
 }
 
 function gameOver(s) {
-    return s.winByLastPlayer || s.moveNumber > size*size
+    return s.winByLastPlayer || s.moves.length === size*size
 }
 
 function empty(s,pos) {
@@ -203,7 +241,7 @@ function cellAt(s,pos) {
 
 function cellName(pos) {
     const [i,j] = pos
-    return String.fromCharCode(65 + j) + String(size-i)
+    return String.fromCharCode(97 + j) + String(size-i)
 }
 
 function isWinline(s,pos,player) {
@@ -229,17 +267,21 @@ function lengthPlayerLineDir(s,pos,player,dir) {
 }
 
 function offBoard(pos) {
-    let [i,j] = pos
+    const [i,j] = pos
     return i < 0 || i >= size || j < 0 || j >= size
 }
 
 function oppositeDir(dir) {
-    let [di,dj] = dir
+    const [di,dj] = dir
     return [-di,-dj]
 }
 
 function stepDir(pos,dir) {
-    let [i,j] = pos
-    let [di,dj] = dir
+    const [i,j] = pos
+    const [di,dj] = dir
     return [i+di,j+dj]
+}
+
+function otherPlayer(player) {
+    return 3 - player
 }
