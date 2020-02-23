@@ -163,11 +163,11 @@ function checkHumanOrAI(s) {
 
 function runAI(s) {
     pauseThen(300,() => {
-        const moves = allLegalMoves(s)
-        const pos = moves[random(moves.length)]
+        const pos = chooseMoveAI(s)
         s.hover = pos
         redraw(s)
         pauseThen(600,() => {
+            s.hover = undefined
             moveAtPosition(s,pos)
             disableUI(s,false)
             endOfInteraction(s)
@@ -175,14 +175,94 @@ function runAI(s) {
     })
 }
 
-function endOfInteraction(s) {
-    redraw(s)
-    saveState(s)
-    checkHumanOrAI(s)
+//const chooseMoveAI = chooseMoveAI_random
+//const chooseMoveAI = chooseMoveAI_takeWin
+const chooseMoveAI = chooseMoveAI_takeWin_avoidLoss
+
+function chooseMoveAI_random(s) {
+    return randomPick(allLegalMoves(s))
+}
+
+function chooseMoveAI_takeWin(s) {
+    const victory = lookVictory1(s)
+    if (victory.length > 0) {
+        return randomPick(victory)
+    } else {
+        return randomPick(allLegalMoves(s))
+    }
+}
+
+function chooseMoveAI_takeWin_avoidLoss(s) {
+    const victory = lookVictory1(s)
+    if (victory.length > 0) {
+        return randomPick(victory)
+    } else {
+        const avoidLoss = lookAvoidLoss2(s)
+        if (avoidLoss.length > 0) {
+            return randomPick(avoidLoss)
+        } else {
+            return randomPick(allLegalMoves(s))
+        }
+    }
+}
+
+function randomPick(moves) {
+    return moves[random(moves.length)]
 }
 
 function random(number) {
     return Math.floor(Math.random() * number);
+}
+
+function lookVictory1(s) {
+    const all = allLegalMoves(s)
+    const victory = []
+    for (let i = 0; i < all.length; i++) {
+        const m = all[i]
+        const score = consider1(s,m)
+        if (score === 1) {
+            victory.push(m)
+        }
+    }
+    return victory
+}
+
+function lookAvoidLoss2(s) {
+    const all = allLegalMoves(s)
+    const selected = []
+    for (let i = 0; i < all.length; i++) {
+        const m = all[i]
+        moveAtPosition(s,m)
+        if (!existsVictory1(s)) {
+            selected.push(m)
+        }
+        undoLastMove(s)
+    }
+    return selected
+}
+
+function existsVictory1(s) {
+    const all = allLegalMoves(s)
+    for (let i = 0; i < all.length; i++) {
+        const m = all[i]
+        const score = consider1(s,m)
+        if (score === 1) return true
+    }
+    return false
+}
+
+function consider1(s,m) {
+    moveAtPosition(s,m)
+    const score = s.winByLastPlayer ? 1 : 0
+    undoLastMove(s)
+    return score
+}
+
+
+function endOfInteraction(s) {
+    redraw(s)
+    saveState(s)
+    checkHumanOrAI(s)
 }
 
 function newState() {
