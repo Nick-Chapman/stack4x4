@@ -1,8 +1,8 @@
 
 const black = 'rgb(0,0,0)'
 const white = 'rgb(255,255,255)'
-const dark = 'rgb(130,130,130)'
-const light = 'rgb(170,170,170)'
+const dark = 'rgb(140,140,140)'
+const light = 'rgb(160,160,160)'
 const purple = 'rgb(137,52,235)'
 const green = 'rgb(83,225,56)'
 
@@ -90,12 +90,23 @@ function drawPiece(ctx,color) {
     ctx.fill()
 }
 
-function drawStroke(ctx,color) {
+function drawCircle(ctx,color,thickness) {
+    const size = (25*4/5) - thickness/2
     ctx.beginPath()
-    ctx.lineWidth = 4
+    ctx.lineWidth = thickness
     ctx.strokeStyle = color
-    ctx.arc (25, 25, 18, 0, 2 * Math.PI)
+    ctx.arc (25, 25, size, 0, 2 * Math.PI)
     ctx.stroke()
+}
+
+function drawCircleSolid(ctx,color,thickness) {
+    ctx.setLineDash([])
+    drawCircle(ctx,color,thickness)
+}
+
+function drawCircleDashed(ctx,color,thickness) {
+    ctx.setLineDash([1,2])
+    drawCircle(ctx,color,thickness)
 }
 
 function redrawStatus(s) {
@@ -147,16 +158,18 @@ function redraw(s) {
     const finished = gameOver(s)
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
+            const pos = [i,j]
             const cell = board[i*size+j]
             const canvas = cell.canvas
             const ctx = cell.ctx
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             if (cell.player === 0) {
-                if (hover && !finished) {
-                    if (isLegalMove(s,hover)) {
-                        const [hi,hj] = hover
-                        if (hi === i && hj === j) {
-                            drawStroke(ctx,colourOfPlayer(nextPlayer))
+                if (!finished) {
+                    if (isLegalMove(s,pos)) {
+                        if (hover && eqPos(pos,hover)) {
+                            drawCircleSolid(ctx,colourOfPlayer(nextPlayer),4)
+                        } else {
+                            drawCircleDashed(ctx,white,1)
                         }
                     }
                 }
@@ -211,6 +224,18 @@ function undoLastMove(s) { return function() {
     }
 }}
 
+
+function allLegalMoves(s) {
+    var acc = []
+    for(let i = 0; i < size ; i++) {
+        for(let j = 0; j < size; j++) {
+            const pos = [i,j]
+            if (isLegalMove(s,pos)) {
+                acc.push(pos)
+            }
+        }
+    }
+}
 
 function isLegalMove(s,pos) {
     return !gameOver(s) && empty(s,pos) && supported(s,pos)
@@ -290,6 +315,12 @@ function stepDir(pos,dir) {
     const [i,j] = pos
     const [di,dj] = dir
     return [i+di,j+dj]
+}
+
+function eqPos(pos1,pos2) {
+    const [i1,j1] = pos1
+    const [i2,j2] = pos2
+    return i1===i2 && j1===j2
 }
 
 function otherPlayer(player) {
