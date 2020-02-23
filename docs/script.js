@@ -162,18 +162,15 @@ function checkHumanOrAI(s) {
 }
 
 function runAI(s) {
-    redraw(s)
-    pauseThen(200,() => {
+    pauseThen(300,() => {
         const moves = allLegalMoves(s)
+        const pos = moves[random(moves.length)]
+        s.hover = pos
         redraw(s)
-        pauseThen(200,() => {
-            const pos = moves[random(moves.length)]
-            redraw(s)
-            pauseThen(200,() => {
-                moveAtPosition(s,pos)
-                disableUI(s,false)
-                endOfInteraction(s)
-            })
+        pauseThen(600,() => {
+            moveAtPosition(s,pos)
+            disableUI(s,false)
+            endOfInteraction(s)
         })
     })
 }
@@ -319,7 +316,11 @@ function redraw(s) {
                 if (!finished) {
                     if (isLegalMove(s,pos)) {
                         if (hover && eqPos(pos,hover)) {
-                            drawCircleSolid(ctx,colourOfPlayer(nextPlayer),4)
+                            const col =
+                                  isPlayerAI(s,nextPlayer)
+                                  ? white
+                                  : colourOfPlayer(nextPlayer)
+                            drawCircleSolid(ctx,col,4)
                         } else {
                             drawCircleDashed(ctx,white,1)
                         }
