@@ -21,3 +21,8 @@ em {
 button {
     font-size: 25px
 }
+
+#Strength {
+    background-color: orange;
+    position: absolute; right: 0;
+}

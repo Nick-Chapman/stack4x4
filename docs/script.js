@@ -56,6 +56,7 @@ function disableUI(s,bool) {
 const canvasSize = 100
 
 function setupDOM(s) {
+    document.getElementById('Strength').onclick = cycleStrength(s)
     document.getElementById('NewGame').onclick = newGame(s)
     document.getElementById('Undo').onclick = undoLastMoveAndUpdate(s)
     document.getElementById('Undo2').onclick = undoTwoLastMovesAndUpdate(s)
@@ -106,6 +107,28 @@ function mouseOut(s,pos) { return function() {
     }
 }}
 
+function cycleStrength(s) { return function() {
+    s.strengthAI = (s.strengthAI + 1)% 5
+    //endOfInteraction(s)
+    redraw(s)
+}}
+
+function newGame(s) { return function() {
+    resetState(s)
+    endOfInteraction(s)
+}}
+
+function undoLastMoveAndUpdate(s) { return function() {
+    undoLastMove(s)
+    endOfInteraction(s)
+}}
+
+function undoTwoLastMovesAndUpdate(s) { return function() {
+    undoLastMove(s)
+    undoLastMove(s)
+    endOfInteraction(s)
+}}
+
 function switchP1(s) { return function() {
     if (!s.disabled) {
         s.player1isAI = !s.player1isAI
@@ -135,23 +158,6 @@ function moveAtPositionAndUpdate(s,pos) { return function() {
     }
 }}
 
-function newGame(s) { return function() {
-    resetState(s)
-    endOfInteraction(s)
-}}
-
-function undoLastMoveAndUpdate(s) { return function() {
-    undoLastMove(s)
-    endOfInteraction(s)
-}}
-
-function undoTwoLastMovesAndUpdate(s) { return function() {
-    undoLastMove(s)
-    undoLastMove(s)
-    endOfInteraction(s)
-}}
-
-
 function checkHumanOrAI(s) {
     if (isPlayerAI(s,s.nextPlayer)) {
         if (!gameOver(s)) {
@@ -162,7 +168,7 @@ function checkHumanOrAI(s) {
 }
 
 function runAI(s) {
-    pauseThen(300,() => {
+    pauseThen(100,() => {
         const pos = chooseMoveAI(s)
         s.hover = pos
         redraw(s)
@@ -175,34 +181,12 @@ function runAI(s) {
     })
 }
 
-//const chooseMoveAI = chooseMoveAI_random
-//const chooseMoveAI = chooseMoveAI_takeWin
-const chooseMoveAI = chooseMoveAI_takeWin_avoidLoss
-
-function chooseMoveAI_random(s) {
-    return randomPick(allLegalMoves(s))
-}
-
-function chooseMoveAI_takeWin(s) {
-    const victory = lookVictory1(s)
-    if (victory.length > 0) {
-        return randomPick(victory)
-    } else {
+function chooseMoveAI(s) {
+    if (s.strengthAI === 0) {
         return randomPick(allLegalMoves(s))
-    }
-}
-
-function chooseMoveAI_takeWin_avoidLoss(s) {
-    const victory = lookVictory1(s)
-    if (victory.length > 0) {
-        return randomPick(victory)
     } else {
-        const avoidLoss = lookAvoidLoss2(s)
-        if (avoidLoss.length > 0) {
-            return randomPick(avoidLoss)
-        } else {
-            return randomPick(allLegalMoves(s))
-        }
+        const depth = s.strengthAI
+        return randomPick(searchMoveDepth(s,depth-1))
     }
 }
 
@@ -214,48 +198,44 @@ function random(number) {
     return Math.floor(Math.random() * number);
 }
 
-function lookVictory1(s) {
+function searchMoveDepth(s,depth) {
     const all = allLegalMoves(s)
     const victory = []
-    for (let i = 0; i < all.length; i++) {
-        const m = all[i]
-        const score = consider1(s,m)
-        if (score === 1) {
-            victory.push(m)
-        }
-    }
-    return victory
-}
-
-function lookAvoidLoss2(s) {
-    const all = allLegalMoves(s)
-    const selected = []
+    const avoidLoss = []
     for (let i = 0; i < all.length; i++) {
         const m = all[i]
         moveAtPosition(s,m)
-        if (!existsVictory1(s)) {
-            selected.push(m)
-        }
+        const score = - scoreDepth(s,depth)
         undoLastMove(s)
+        if (score === 1) victory.push(m)
+        if (score === 0) avoidLoss.push(m)
     }
-    return selected
+    if (victory.length > 0) {
+        return victory
+    } else {
+        if (avoidLoss.length > 0) {
+            return avoidLoss
+        } else {
+            return allLegalMoves(s)
+        }
+    }
 }
 
-function existsVictory1(s) {
+function scoreDepth(s,depth) {
+    if (depth === 0 || gameOver(s)) {
+        return s.winByLastPlayer ? -1 : 0
+    }
+    var best = -1
     const all = allLegalMoves(s)
     for (let i = 0; i < all.length; i++) {
         const m = all[i]
-        const score = consider1(s,m)
+        moveAtPosition(s,m)
+        const score = - scoreDepth(s, depth-1)
+        undoLastMove(s)
         if (score === 1) return true
+        if (score === 0) best = 0
     }
-    return false
-}
-
-function consider1(s,m) {
-    moveAtPosition(s,m)
-    const score = s.winByLastPlayer ? 1 : 0
-    undoLastMove(s)
-    return score
+    return best
 }
 
 
@@ -273,8 +253,9 @@ function newState() {
     const moves = []
     const player1isAI = false
     const player2isAI = true
+    const strengthAI = 3
     s = { hover, nextPlayer, winByLastPlayer, board, moves,
-          player1isAI, player2isAI
+          player1isAI, player2isAI, strengthAI
         }
     return s
 }
@@ -372,6 +353,11 @@ function redrawMoveList(s) {
     }
 }
 
+function redrawAIstrength(s) {
+    const p = document.getElementById('Strength')
+    p.textContent = 'AI Strength = ' + String(s.strengthAI)
+}
+
 function redrawPlayerInfo(s) {
     const p1 = document.getElementById('Player1')
     const p2 = document.getElementById('Player2')
@@ -383,6 +369,7 @@ function redraw(s) {
     const {hover, nextPlayer, board} = s
     redrawStatus(s)
     redrawMoveList(s)
+    redrawAIstrength(s)
     redrawPlayerInfo(s)
     const finished = gameOver(s)
     for(let i = 0; i < size ; i++) {
