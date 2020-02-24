@@ -253,7 +253,7 @@ function newState() {
     const moves = []
     const player1isAI = false
     const player2isAI = true
-    const strengthAI = 3
+    const strengthAI = 4
     s = { hover, nextPlayer, winByLastPlayer, board, moves,
           player1isAI, player2isAI, strengthAI
         }
