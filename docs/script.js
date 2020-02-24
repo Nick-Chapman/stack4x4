@@ -182,12 +182,9 @@ function runAI(s) {
 }
 
 function chooseMoveAI(s) {
-    if (s.strengthAI === 0) {
-        return randomPick(allLegalMoves(s))
-    } else {
-        const depth = s.strengthAI
-        return randomPick(searchMoveDepth(s,depth-1))
-    }
+    const [rationale,xs] = candidateMovesAI(s)
+    console.log(rationale,xs.map(cellName))
+    return randomPick(xs)
 }
 
 function randomPick(moves) {
@@ -196,6 +193,15 @@ function randomPick(moves) {
 
 function random(number) {
     return Math.floor(Math.random() * number);
+}
+
+function candidateMovesAI(s) {
+    if (s.strengthAI === 0) {
+        return ["Anywhere (No intelligence)",allLegalMoves(s)]
+    } else {
+        const depth = s.strengthAI
+        return searchMoveDepth(s,depth-1)
+    }
 }
 
 function searchMoveDepth(s,depth) {
@@ -211,12 +217,19 @@ function searchMoveDepth(s,depth) {
         if (score === 0) avoidLoss.push(m)
     }
     if (victory.length > 0) {
-        return victory
+        return ["For victory!",victory]
     } else {
         if (avoidLoss.length > 0) {
-            return avoidLoss
+            const numLoss = all.length - avoidLoss.length
+            if (numLoss > 0) {
+                return ["Avoiding loss in "
+                        + String(numLoss) + " other places."
+                        , avoidLoss]
+            } else {
+                return ["Anywhere (Doesn't matter)",all]
+            }
         } else {
-            return allLegalMoves(s)
+            return ["Anywhere (Can't avoid loss)",all]
         }
     }
 }
