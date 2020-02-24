@@ -9,7 +9,8 @@ const green = 'rgb(25,170,25)'
 const size = 8
 const winLineLength = 4
 
-const maxAIstrength = 4
+const maxAIstrength = 6
+const initAIstrength = 4
 
 function pauseThen(ms,f) {
     setTimeout(f,ms)
@@ -216,7 +217,7 @@ function searchMoveDepth(s,depth) {
         const m = all[i]
         s.movesConsidered ++
         moveAtPosition(s,m)
-        const score = - scoreDepth(s,depth)
+        const score = - scoreDepth(s,depth, 1)
         undoLastMove(s)
         if (score === 1) victory.push(m)
         if (score === 0) avoidLoss.push(m)
@@ -239,7 +240,7 @@ function searchMoveDepth(s,depth) {
     }
 }
 
-function scoreDepth(s,depth) {
+function scoreDepth(s,depth,cutoff) {
     if (depth === 0 || gameOver(s)) {
         return s.winByLastPlayer ? -1 : 0
     }
@@ -249,9 +250,9 @@ function scoreDepth(s,depth) {
         const m = all[i]
         s.movesConsidered ++
         moveAtPosition(s,m)
-        const score = - scoreDepth(s, depth-1)
+        const score = - scoreDepth(s, depth-1, -best)
         undoLastMove(s)
-        if (score === 1) return 1 //cutoff
+        if (score >= cutoff) return score //prune
         if (score > best) best = score
     }
     return best
@@ -272,7 +273,7 @@ function newState() {
     const moves = []
     const player1isAI = false
     const player2isAI = true
-    const strengthAI = maxAIstrength
+    const strengthAI = initAIstrength
     s = { hover, nextPlayer, winByLastPlayer, board, moves,
           player1isAI, player2isAI, strengthAI
         }
