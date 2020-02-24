@@ -9,6 +9,8 @@ const green = 'rgb(25,170,25)'
 const size = 8
 const winLineLength = 4
 
+const maxAIstrength = 4
+
 function pauseThen(ms,f) {
     setTimeout(f,ms)
 }
@@ -108,7 +110,7 @@ function mouseOut(s,pos) { return function() {
 }}
 
 function cycleStrength(s) { return function() {
-    s.strengthAI = (s.strengthAI + 1)% 5
+    s.strengthAI = (s.strengthAI + 1) % (maxAIstrength+1)
     //endOfInteraction(s)
     redraw(s)
 }}
@@ -182,8 +184,10 @@ function runAI(s) {
 }
 
 function chooseMoveAI(s) {
+    s.movesConsidered = 0
+    console.log("AI thinking...")
     const [rationale,xs] = candidateMovesAI(s)
-    console.log(rationale,xs.map(cellName))
+    console.log(s.movesConsidered, rationale, xs.map(cellName))
     return randomPick(xs)
 }
 
@@ -210,6 +214,7 @@ function searchMoveDepth(s,depth) {
     const avoidLoss = []
     for (let i = 0; i < all.length; i++) {
         const m = all[i]
+        s.movesConsidered ++
         moveAtPosition(s,m)
         const score = - scoreDepth(s,depth)
         undoLastMove(s)
@@ -242,11 +247,12 @@ function scoreDepth(s,depth) {
     const all = allLegalMoves(s)
     for (let i = 0; i < all.length; i++) {
         const m = all[i]
+        s.movesConsidered ++
         moveAtPosition(s,m)
         const score = - scoreDepth(s, depth-1)
         undoLastMove(s)
-        if (score === 1) return true
-        if (score === 0) best = 0
+        if (score === 1) return 1 //cutoff
+        if (score > best) best = score
     }
     return best
 }
@@ -266,7 +272,7 @@ function newState() {
     const moves = []
     const player1isAI = false
     const player2isAI = true
-    const strengthAI = 4
+    const strengthAI = maxAIstrength
     s = { hover, nextPlayer, winByLastPlayer, board, moves,
           player1isAI, player2isAI, strengthAI
         }
