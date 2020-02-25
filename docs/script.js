@@ -9,7 +9,7 @@ const green = 'rgb(25,170,25)'
 const size = 8
 const winLineLength = 4
 
-const maxAIstrength = 10
+const maxAIstrength = 6
 const initAIstrength = 4
 
 function pauseThen(ms,f) {
@@ -25,7 +25,7 @@ function init() {
     setupDOM(s)
     const moves = JSON.parse(localStorage.getItem('SavedMoves'))
     if (moves) {
-        disableUI(s,true)
+        lockoutHuman(s,true)
         restoreState(s,moves,0)
     }
 }
@@ -41,17 +41,20 @@ function restoreState(s,moves,i) {
             restoreState(s,moves,i+1)
         })
     } else {
-        disableUI(s,false)
+        lockoutHuman(s,false)
         endOfInteraction(s)
     }
 }
 
-const buttonLabels = ['NewGame','Undo','Undo2']
+// we only disable those button which affect the board state
+const buttonsToDisable = ['NewGame','Undo','Undo2']
 
-function disableUI(s,bool) {
-    s.disabled = bool
-    for (let i = 0; i < buttonLabels.length; i++) {
-        const name = buttonLabels[i]
+// we call lockoutHuman when the AI is running or during initial restore
+// we disable the UI and mark that the AI is running
+function lockoutHuman(s,bool) {
+    s.aiRunning = bool
+    for (let i = 0; i < buttonsToDisable.length; i++) {
+        const name = buttonsToDisable[i]
         document.getElementById(name).disabled = bool
     }
 }
@@ -97,14 +100,14 @@ function setupDOM(s) {
 }
 
 function mouseOver(s,pos) { return function() {
-    if (!s.disabled) {
+    if (!s.aiRunning) {
         s.hover = pos
         redraw(s)
     }
 }}
 
 function mouseOut(s,pos) { return function() {
-    if (!s.disabled) {
+    if (!s.aiRunning) {
         s.hover = undefined
         redraw(s)
     }
@@ -112,8 +115,7 @@ function mouseOut(s,pos) { return function() {
 
 function cycleStrength(s) { return function() {
     s.strengthAI = (s.strengthAI + 1) % (maxAIstrength+1)
-    //endOfInteraction(s)
-    redraw(s)
+    endOfInteraction(s)
 }}
 
 function newGame(s) { return function() {
@@ -133,55 +135,53 @@ function undoTwoLastMovesAndUpdate(s) { return function() {
 }}
 
 function switchP1(s) { return function() {
-    if (!s.disabled) {
-        s.player1isAI = !s.player1isAI
-        endOfInteraction(s)
-    }
+    s.player1isAI = !s.player1isAI
+    endOfInteraction(s)
 }}
 
 function switchP2(s) { return function() {
-    if (!s.disabled) {
-        s.player2isAI = !s.player2isAI
-        endOfInteraction(s)
-    }
+    s.player2isAI = !s.player2isAI
+    endOfInteraction(s)
 }}
 
 function switchBothPlayers(s) { return function() {
-    if (!s.disabled) {
-        s.player1isAI = !s.player1isAI
-        s.player2isAI = !s.player2isAI
-        endOfInteraction(s)
-    }
+    s.player1isAI = !s.player1isAI
+    s.player2isAI = !s.player2isAI
+    endOfInteraction(s)
 }}
 
 function moveAtPositionAndUpdate(s,pos) { return function() {
-    if (!s.disabled) {
+    // make explicit check because there was no button to disable
+    if (!s.aiRunning) {
         moveAtPosition(s,pos)
         endOfInteraction(s)
     }
 }}
 
-function checkHumanOrAI(s) {
-    if (isPlayerAI(s,s.nextPlayer)) {
-        if (!gameOver(s)) {
-            disableUI(s,true)
-            runAI(s)
-        }
-    }
+// This is called even if the AI is running
+function endOfInteraction(s) {
+    redraw(s)
+    saveState(s)
+    maybeRunAI(s)
 }
 
-function runAI(s) {
-    pauseThen(100,() => {
-        const pos = chooseMoveAI(s)
-        s.hover = pos
-        redraw(s)
-        pauseThen(600,() => {
-            s.hover = undefined
-            moveAtPosition(s,pos)
-            disableUI(s,false)
-            endOfInteraction(s)
+function maybeRunAI(s) {
+    if (!s.aiRunning && isPlayerAI(s,s.nextPlayer) && !gameOver(s)) {
+        console.log("AI(wait a mo)")
+        lockoutHuman(s,true)
+        pauseThen(100,() => {
+            console.log("AI(go)")
+            const pos = chooseMoveAI(s)
+            s.hover = pos
+            redraw(s)
+            pauseThen(600,() => {
+                s.hover = undefined
+                moveAtPosition(s,pos)
+                lockoutHuman(s,false)
+                endOfInteraction(s)
+            })
         })
-    })
+    }
 }
 
 function chooseMoveAI(s) {
@@ -264,13 +264,6 @@ function scoreDepth(s,depth,cutoff) { //depth>=0
         if (score > best) best = score
     }
     return best
-}
-
-
-function endOfInteraction(s) {
-    redraw(s)
-    saveState(s)
-    checkHumanOrAI(s)
 }
 
 function newState() {
