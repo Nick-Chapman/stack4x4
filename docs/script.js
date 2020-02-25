@@ -9,7 +9,7 @@ const green = 'rgb(25,170,25)'
 const size = 8
 const winLineLength = 4
 
-const maxAIstrength = 6
+const maxAIstrength = 10
 const initAIstrength = 4
 
 function pauseThen(ms,f) {
@@ -205,42 +205,50 @@ function candidateMovesAI(s) {
         return ["Anywhere (No intelligence)",allLegalMoves(s)]
     } else {
         const depth = s.strengthAI
-        return searchMoveDepth(s,depth-1)
+        const all = allLegalMoves(s)
+        return searchMoveDepthIterConsider(s,depth,1,all)
     }
 }
 
-function searchMoveDepth(s,depth) {
-    const all = allLegalMoves(s)
+function searchMoveDepthIterConsider(s,maxDepth,iter,consider) {
+    console.log('AI iter (' + String(iter) + ' of ' + String(maxDepth)
+                + ') considering=#' + String(consider.length))
+    const [victory,avoidLoss] = searchMoveDepthConsider(s,iter,consider)
+    if (victory.length > 0) {
+        return ["Victory",victory]
+    }
+    if (avoidLoss.length === 0) {
+        return ["Can't avoid loss", consider]
+    }
+    if (avoidLoss.length === 1) {
+        return ["Single move forced", avoidLoss]
+    }
+    const n = consider.length - avoidLoss.length
+    if (n > 0) {
+        console.log("Avoiding " + String(n) + " places")
+    }
+    if (iter === maxDepth) {
+        return ["MaxDepth", avoidLoss]
+    }
+    return searchMoveDepthIterConsider(s,maxDepth,iter+1,avoidLoss)
+}
+
+function searchMoveDepthConsider(s,depth,consider) { //depth>=1
     const victory = []
     const avoidLoss = []
-    for (let i = 0; i < all.length; i++) {
-        const m = all[i]
+    for (let i = 0; i < consider.length; i++) {
+        const m = consider[i]
         s.movesConsidered ++
         moveAtPosition(s,m)
-        const score = - scoreDepth(s,depth, 1)
+        const score = - scoreDepth(s,depth-1, 1)
         undoLastMove(s)
         if (score === 1) victory.push(m)
         if (score === 0) avoidLoss.push(m)
     }
-    if (victory.length > 0) {
-        return ["For victory!",victory]
-    } else {
-        if (avoidLoss.length > 0) {
-            const numLoss = all.length - avoidLoss.length
-            if (numLoss > 0) {
-                return ["Avoiding loss in "
-                        + String(numLoss) + " other places."
-                        , avoidLoss]
-            } else {
-                return ["Anywhere (Doesn't matter)",all]
-            }
-        } else {
-            return ["Anywhere (Can't avoid loss)",all]
-        }
-    }
+    return [victory,avoidLoss]
 }
 
-function scoreDepth(s,depth,cutoff) {
+function scoreDepth(s,depth,cutoff) { //depth>=0
     if (depth === 0 || gameOver(s)) {
         return s.winByLastPlayer ? -1 : 0
     }
