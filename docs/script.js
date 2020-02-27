@@ -31,6 +31,7 @@ function init() {
     setupDOM(s)
     const moves = JSON.parse(localStorage.getItem('SavedMoves'))
     if (moves) {
+        s.restoring = true
         lockoutHuman(s,true)
         restoreState(s,moves,0)
     }
@@ -47,6 +48,7 @@ function restoreState(s,moves,i) {
             restoreState(s,moves,i+1)
         })
     } else {
+        s.restoring = false
         lockoutHuman(s,false)
         endOfInteraction(s)
     }
@@ -58,12 +60,10 @@ const buttonsToDisable = ['NewGame','Undo','Undo2']
 // we call lockoutHuman when the AI is running or during initial restore
 // we disable the UI and mark that the AI is running
 function lockoutHuman(s,bool) {
-    s.aiRunning = bool
     for (let i = 0; i < buttonsToDisable.length; i++) {
         const name = buttonsToDisable[i]
         document.getElementById(name).disabled = bool
     }
-    document.getElementById('StopAI').textContent = bool ? 'Stop AI' : ''
 }
 
 const canvasSize = 100
@@ -108,14 +108,14 @@ function setupDOM(s) {
 }
 
 function mouseOver(s,pos) { return function() {
-    if (!s.aiRunning) {
+    if (!s.aiRunning && !s.restoring) {
         s.hover = pos
         redraw(s)
     }
 }}
 
 function mouseOut(s,pos) { return function() {
-    if (!s.aiRunning) {
+    if (!s.aiRunning && !s.restoring) {
         s.hover = undefined
         redraw(s)
     }
@@ -165,7 +165,7 @@ function stopAI(s) { return function() {
 
 function moveAtPositionAndUpdate(s,pos) { return function() {
     // make an explicit check because there is no button to disable
-    if (!s.aiRunning) {
+    if (!s.aiRunning && !s.restoring) {
         moveAtPosition(s,pos)
         endOfInteraction(s)
     }
@@ -179,7 +179,9 @@ function endOfInteraction(s) {
 }
 
 function maybeRunAI(s) {
-    if (!s.aiRunning && isPlayerAI(s,s.nextPlayer) && !gameOver(s)) {
+    if (!s.aiRunning && !s.restoring && isPlayerAI(s,s.nextPlayer) && !gameOver(s)) {
+        s.aiRunning = true
+        document.getElementById('StopAI').textContent = 'Stop AI'
         lockoutHuman(s,true)
         pauseThen(100,() => {
             var timeoutAlive = true
@@ -195,7 +197,9 @@ function maybeRunAI(s) {
                 pauseThen(aiMoveHighlightTime,() => {
                     s.hover = undefined
                     moveAtPosition(s,pos)
+                    s.aiRunning = false
                     lockoutHuman(s,false)
+                    document.getElementById('StopAI').textContent = ''
                     endOfInteraction(s)
                 })
             })
@@ -224,14 +228,29 @@ function chooseMoveAI(s,k) {
     g.board = cloneBoardCells(s.board) //array of mutable cells
     g.winByLastPlayer = s.winByLastPlayer
     s.movesConsidered = 0
-    return candidateMovesAI(s,g,function(rationale,xs) {
-        console.log(s.movesConsidered, rationale, xs.map(cellName))
-        return k(randomPick(xs))
+    return candidateMovesAI(s,g, (rationale,weighted) => {
+        console.log(s.movesConsidered, rationale, weighted.map(([p,w]) => cellName(p)+'-'+w))
+        return k(randomWeightedPick(weighted))
     })
 }
 
-function randomPick(moves) {
-    return moves[random(moves.length)]
+function randomWeightedPick(weighted) {
+    const ws = weighted.map(([_,w]) => w)
+    const moves = weighted.map(([m,_]) => m)
+    function add(x,y) { return x + y }
+    const sum = ws.reduce(add,0)
+    const roll = random(sum)
+    var acc = 0
+    var index = 0
+    while(ws) {
+        const w = ws.shift() // pop front array
+        acc += w
+        if (acc > roll) {
+            return moves[index]
+        }
+        index++
+    }
+    alert("randomWeightedPick: shouldn't reach here")
 }
 
 function random(number) {
@@ -246,23 +265,25 @@ function candidateMovesAI(s,g,k) {
 
 function searchMoveDeepeningConsider(s,g,depth,consider,k) { //depth>=1
     redraw(s)
-    console.log('AI depth ' + depth + '... [considering=#' + consider.length + ']')
+    console.log('AI depth ' + depth + '... [considering:' + consider.map(cellName) + ']')
     searchMoveDepthConsider(
         s,g,depth,consider,
         () => {
             s.lastAiMoveDepth = depth-1
-            return k("Timeout, using depth="+(depth-1),consider)
+            const cube = x => x*x*x
+            const weighted = consider.map(p => [p,cube(scorePos(p))])
+            return k("Timeout, using depth="+(depth-1),weighted)
         },
         (victory,avoidLoss) => {
             s.lastAiMoveDepth = depth
             if (victory.length > 0) {
-                return k("Victory",victory)
+                return k("Victory",victory.map(p => [p,1]))
             }
             if (avoidLoss.length === 0) {
-                return k("Can't avoid loss", consider)
+                return k("Can't avoid loss", consider.map(p => [p,1]))
             }
             if (avoidLoss.length === 1) {
-                return k("Single move forced", avoidLoss)
+                return k("Single move forced", avoidLoss.map(p => [p,1]))
             }
             const n = consider.length - avoidLoss.length
             if (n > 0) {
@@ -331,7 +352,7 @@ function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
 }
 
 function pauseMaybe(s,stop,k) {
-    if (s.movesConsidered % 500 === 0) {
+    if (s.movesConsidered % 1000 === 0) {
         return pauseThen(0,() => {
             if (s.stop) {
                 return stop()
@@ -422,9 +443,9 @@ function redrawStatus(s) {
         }
     } else {
         p.style.color = colourOfPlayer(nextPlayer)
+        const thinking = isPlayerAI(s,nextPlayer) && s.aiRunning
         p.textContent = (playerName(s,nextPlayer) + ' to move'
-                         + ((isPlayerAI(s,nextPlayer)) ? ' (AI thinking...)' : '')
-                        )
+                         + (thinking ? ' (AI thinking...)' : ''))
     }
 }
 
@@ -534,17 +555,45 @@ function undoLastMove(s) {
     }
 }
 
-function allLegalMoves(s) {
-    var acc = []
+const quartile = [
+    [ 3, 4, 5, 7],
+    [ 4, 6, 8,10],
+    [ 5, 8,11,13],
+    [ 7,10,13,16]
+]
+
+function scorePos(pos) {
+    const [i,j] = pos
+    const ii = i<4 ? i : 7-i
+    const jj = j<4 ? j : 7-j
+    return quartile[ii][jj]
+}
+
+function allMoves() { //TODO: cache this?
+    acc = []
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
             const pos = [i,j]
-            if (isLegalMove(s,pos)) {
-                acc.push(pos)
-            }
+            const score = scorePos(pos)
+            acc.push([pos,score])
         }
     }
+    acc.sort(([_,n1], [__,n2]) => n1-n2).reverse()
     return acc
+}
+
+console.log(allMoves().map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
+
+function allLegalMoves(s) {
+    const res = []
+    const all = allMoves()
+    for (let i = 0; i < size*size; i++) {
+        const [pos,_] = all[i]
+        if (isLegalMove(s,pos)) {
+            res.push(pos)
+        }
+    }
+    return res
 }
 
 function isLegalMove(s,pos) {
@@ -638,3 +687,4 @@ function otherPlayer(player) {
 }
 
 init()
+
