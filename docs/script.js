@@ -260,10 +260,11 @@ function random(number) {
 function candidateMovesAI(s,g,k) {
     const all = allLegalMoves(g)
     s.stop = false
-    return searchMoveDeepeningConsider(s,g,1,all,k)
+    const scored = all.map(p => [p,1])
+    return searchMoveDeepeningConsider(s,g,1,all,scored,k)
 }
 
-function searchMoveDeepeningConsider(s,g,depth,consider,k) { //depth>=1
+function searchMoveDeepeningConsider(s,g,depth,consider,lastScored,k) { //depth>=1
     redraw(s)
     console.log('AI depth ' + depth + '... [considering:' + consider.map(cellName) + ']')
     searchMoveDepthConsider(
@@ -271,10 +272,17 @@ function searchMoveDeepeningConsider(s,g,depth,consider,k) { //depth>=1
         () => {
             s.lastAiMoveDepth = depth-1
             const cube = x => x*x*x
-            const weighted = consider.map(p => [p,cube(scorePos(p))])
+            //const weighted = consider.map(p => [p,cube(scorePos(p))]) //OLD
+            const scores = lastScored.map(([_,s]) => s)
+            function min(x,y) { return x < y ? x : y }
+            const worstScore = scores.reduce(min,win)
+            const weighted = lastScored.map(([p,s]) => [p, cube(1 + s - worstScore)])
             return k("Timeout, using depth="+(depth-1),weighted)
         },
-        (victory,avoidLoss) => {
+        (victory,avoidLoss,scored) => {
+            //console.log('Victory:' + victory.map(cellName))
+            //console.log('AvoidLoss:' + avoidLoss.map(cellName))
+            //console.log('Scored:' + scored.map(([p,s]) => cellName(p) + '=' + s))
             s.lastAiMoveDepth = depth
             if (victory.length > 0) {
                 return k("Victory",victory.map(p => [p,1]))
@@ -290,27 +298,35 @@ function searchMoveDeepeningConsider(s,g,depth,consider,k) { //depth>=1
                 console.log("Avoiding " + n + " places")
             }
             return pauseThen(0,() => {
-                return searchMoveDeepeningConsider(s,g,depth+1,avoidLoss,k)
+                return searchMoveDeepeningConsider(s,g,depth+1,avoidLoss,scored,k)
             })
         }
     )
 }
 
+const win = 999 //infinity
+const loss = -win
+const draw = 0
+
 function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
     const victory = []
     const avoidLoss = []
+    const scored = []
     const loop = i => {
         if (i === consider.length) {
-            return k(victory,avoidLoss)
+            return k(victory,avoidLoss,scored)
         } else {
             const m = consider[i]
             s.movesConsidered ++
             moveAtPosition(g,m)
-            return scoreDepth(s,g, depth-1, 1, stop, invScore => {
+            return scoreDepth(s,g, depth-1, win, stop, invScore => {
                 const score = - invScore
                 undoLastMove(g)
-                if (score === 1) victory.push(m)
-                if (score === 0) avoidLoss.push(m)
+                if (score === win) victory.push(m)
+                if (score > loss) {
+                    avoidLoss.push(m)
+                    scored.push([m,score]) //same length as avoidLoss
+                }
                 return loop(i+1)
             })
         }
@@ -319,11 +335,15 @@ function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
 }
 
 function scoreDepth(s,g,depth,cutoff,stop,k) { //depth>=0
-    if (depth === 0 || gameOver(g)) {
-        return k(g.winByLastPlayer ? -1 : 0)
+    if (g.winByLastPlayer) return k(loss)
+    if (g.moves.length === size*size) return k(draw)
+    if (depth === 0) {
+        //const score = 0 //no heuristic
+        const score = scoreGameForCurrentPlayer(g) // heuristic
+        return k(score)
     }
     const all = allLegalMoves(g)
-    const best = -1
+    const best = loss
     const i = 0
     return considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k)
 }
@@ -352,7 +372,7 @@ function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
 }
 
 function pauseMaybe(s,stop,k) {
-    if (s.movesConsidered % 1000 === 0) {
+    if (s.movesConsidered % 500 === 0) {
         return pauseThen(0,() => {
             if (s.stop) {
                 return stop()
@@ -567,6 +587,14 @@ function undoLastMove(s) {
         s.nextPlayer = otherPlayer(nextPlayer);
         s.winByLastPlayer = false
     }
+}
+
+function scoreGameForCurrentPlayer(s) {
+    const score = scoreGameForPlayer1(s)
+    const player = s.nextPlayer
+    if (player === 1) return score
+    if (player === 2) return -score
+    alert("scoreGameForCurrentPlayer!")
 }
 
 function scoreGameForPlayer1(s) {
