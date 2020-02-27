@@ -479,6 +479,20 @@ function redrawTimeLimit(s) {
     document.getElementById('LastAiMoveDepth')
         .textContent = (s.lastAiMoveDepth > 0)
         ? 'Depth = ' + String(s.lastAiMoveDepth) : ''
+    {
+        const elem = document.getElementById('GameScore')
+        const score = scoreGameForPlayer1(s)
+        if (score === 0) {
+            elem.textContent = '0'
+            elem.style.color = black
+        } else if (score > 0) {
+            elem.textContent = '+' + score
+            elem.style.color = purple
+        } else {
+            elem.textContent = '+' + -score
+            elem.style.color = green
+        }
+    }
 }
 
 function redrawPlayerInfo(s) {
@@ -555,11 +569,24 @@ function undoLastMove(s) {
     }
 }
 
+function scoreGameForPlayer1(s) {
+    var acc = 0
+    for(let i = 0; i < size ; i++) {
+        for(let j = 0; j < size; j++) {
+            const pos = [i,j]
+            const player = playerAt(s,pos)
+            if (player === 1) acc += scorePos(pos)
+            if (player === 2) acc -= scorePos(pos)
+        }
+    }
+    return acc
+}
+
 const quartile = [
-    [ 3, 4, 5, 7],
-    [ 4, 6, 8,10],
-    [ 5, 8,11,13],
-    [ 7,10,13,16]
+    [ 3,  4,  5,  7 ],
+    [ 4,  6,  8, 10 ],
+    [ 5,  8, 11, 13 ],
+    [ 7, 10, 13, 16 ]
 ]
 
 function scorePos(pos) {
@@ -582,7 +609,7 @@ function allMoves() { //TODO: cache this?
     return acc
 }
 
-console.log(allMoves().map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
+//console.log(allMoves().map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
 
 function allLegalMoves(s) {
     const res = []

@@ -40,3 +40,7 @@ button {
     background-color: red;
     position: absolute; right: 0;
 }
+
+#GameScore {
+    position: absolute; right: 0;
+}
