@@ -4,8 +4,12 @@ html {
     font-family: "Kalam";
 }
 
-em {
-    color: red
+h1 {
+    font-size: 50px
+}
+
+h2 {
+    font-size: 30px
 }
 
 .cell {
@@ -19,10 +23,20 @@ em {
 }
 
 button {
-    font-size: 25px
+    font-size: 25px;
+    background-color: orange;
 }
 
-#Strength {
-    background-color: orange;
+#LastAiMoveDepth {
+    color: red;
+}
+
+#SwitchPlayers {
+    position: absolute; right: 0;
+}
+
+#StopAI {
+    color: white;
+    background-color: red;
     position: absolute; right: 0;
 }

@@ -9,8 +9,14 @@ const green = 'rgb(25,170,25)'
 const size = 8
 const winLineLength = 4
 
-const maxAIstrength = 6
-const initAIstrength = 4
+const aiMoveHighlightTime = 100 // flash white circle
+
+const timeLimits = [ 0, 300, 700, 1000, 2000, 3000, 5000, 8000, 13000, 21000, 34000 ]
+const initTimeLimitIndex = 3
+
+function timeLimit(s) {
+    return timeLimits[s.timeLimitIndex]
+}
 
 function pauseThen(ms,f) {
     setTimeout(f,ms)
@@ -57,18 +63,20 @@ function lockoutHuman(s,bool) {
         const name = buttonsToDisable[i]
         document.getElementById(name).disabled = bool
     }
+    document.getElementById('StopAI').textContent = bool ? 'Stop AI' : ''
 }
 
 const canvasSize = 100
 
 function setupDOM(s) {
-    document.getElementById('Strength').onclick = cycleStrength(s)
+    document.getElementById('TimeLimit').onclick = cycleTimeLimit(s)
     document.getElementById('NewGame').onclick = newGame(s)
     document.getElementById('Undo').onclick = undoLastMoveAndUpdate(s)
     document.getElementById('Undo2').onclick = undoTwoLastMovesAndUpdate(s)
     document.getElementById('Player1switch').onclick = switchP1(s)
     document.getElementById('Player2switch').onclick = switchP2(s)
     document.getElementById('SwitchPlayers').onclick = switchBothPlayers(s)
+    document.getElementById('StopAI').onclick = stopAI(s)
     gridTag = document.getElementById('GridTag')
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -113,8 +121,8 @@ function mouseOut(s,pos) { return function() {
     }
 }}
 
-function cycleStrength(s) { return function() {
-    s.strengthAI = (s.strengthAI + 1) % (maxAIstrength+1)
+function cycleTimeLimit(s) { return function() {
+    s.timeLimitIndex = (s.timeLimitIndex + 1) % timeLimits.length
     endOfInteraction(s)
 }}
 
@@ -150,8 +158,13 @@ function switchBothPlayers(s) { return function() {
     endOfInteraction(s)
 }}
 
+function stopAI(s) { return function() {
+    s.stop = true
+    endOfInteraction(s)
+}}
+
 function moveAtPositionAndUpdate(s,pos) { return function() {
-    // make explicit check because there was no button to disable
+    // make an explicit check because there is no button to disable
     if (!s.aiRunning) {
         moveAtPosition(s,pos)
         endOfInteraction(s)
@@ -161,35 +174,60 @@ function moveAtPositionAndUpdate(s,pos) { return function() {
 // This is called even if the AI is running
 function endOfInteraction(s) {
     redraw(s)
-    saveState(s)
+    saveState(s) //Should this be done here?
     maybeRunAI(s)
 }
 
 function maybeRunAI(s) {
     if (!s.aiRunning && isPlayerAI(s,s.nextPlayer) && !gameOver(s)) {
-        console.log("AI(wait a mo)")
         lockoutHuman(s,true)
         pauseThen(100,() => {
-            console.log("AI(go)")
-            const pos = chooseMoveAI(s)
-            s.hover = pos
-            redraw(s)
-            pauseThen(600,() => {
-                s.hover = undefined
-                moveAtPosition(s,pos)
-                lockoutHuman(s,false)
-                endOfInteraction(s)
+            var timeoutAlive = true
+            setTimeout(() => {
+                if (timeoutAlive) {
+                    s.stop = true
+                }
+            },timeLimit(s))
+            chooseMoveAI(s,pos => {
+                timeoutAlive = false
+                s.hover = pos
+                redraw(s)
+                pauseThen(aiMoveHighlightTime,() => {
+                    s.hover = undefined
+                    moveAtPosition(s,pos)
+                    lockoutHuman(s,false)
+                    endOfInteraction(s)
+                })
             })
         })
     }
 }
 
-function chooseMoveAI(s) {
+function cloneBoardCells(b0) {
+    const b = []
+    for(let i = 0; i < size ; i++) {
+        for(let j = 0; j < size; j++) {
+            const cell0 = b0[i*size+j]
+            cell = {}
+            cell.player = cell0.player
+            b[i*size+j] = cell
+        }
+    }
+    return b
+}
+
+function chooseMoveAI(s,k) {
+    // TODO: Properly distiguish Game state from UI state
+    g = {}
+    g.nextPlayer = s.nextPlayer
+    g.moves = s.moves.slice(0) //array of immutable position objects
+    g.board = cloneBoardCells(s.board) //array of mutable cells
+    g.winByLastPlayer = s.winByLastPlayer
     s.movesConsidered = 0
-    console.log("AI thinking...")
-    const [rationale,xs] = candidateMovesAI(s)
-    console.log(s.movesConsidered, rationale, xs.map(cellName))
-    return randomPick(xs)
+    return candidateMovesAI(s,g,function(rationale,xs) {
+        console.log(s.movesConsidered, rationale, xs.map(cellName))
+        return k(randomPick(xs))
+    })
 }
 
 function randomPick(moves) {
@@ -200,91 +238,130 @@ function random(number) {
     return Math.floor(Math.random() * number);
 }
 
-function candidateMovesAI(s) {
-    if (s.strengthAI === 0) {
-        return ["Anywhere (No intelligence)",allLegalMoves(s)]
-    } else {
-        const depth = s.strengthAI
-        const all = allLegalMoves(s)
-        return searchMoveDepthIterConsider(s,depth,1,all)
-    }
+function candidateMovesAI(s,g,k) {
+    const all = allLegalMoves(g)
+    s.stop = false
+    return searchMoveDeepeningConsider(s,g,1,all,k)
 }
 
-function searchMoveDepthIterConsider(s,maxDepth,iter,consider) {
-    console.log('AI iter (' + String(iter) + ' of ' + String(maxDepth)
-                + ') considering=#' + String(consider.length))
-    const [victory,avoidLoss] = searchMoveDepthConsider(s,iter,consider)
-    if (victory.length > 0) {
-        return ["Victory",victory]
-    }
-    if (avoidLoss.length === 0) {
-        return ["Can't avoid loss", consider]
-    }
-    if (avoidLoss.length === 1) {
-        return ["Single move forced", avoidLoss]
-    }
-    const n = consider.length - avoidLoss.length
-    if (n > 0) {
-        console.log("Avoiding " + String(n) + " places")
-    }
-    if (iter === maxDepth) {
-        return ["MaxDepth", avoidLoss]
-    }
-    return searchMoveDepthIterConsider(s,maxDepth,iter+1,avoidLoss)
+function searchMoveDeepeningConsider(s,g,depth,consider,k) { //depth>=1
+    redraw(s)
+    console.log('AI depth ' + depth + '... [considering=#' + consider.length + ']')
+    searchMoveDepthConsider(
+        s,g,depth,consider,
+        () => {
+            s.lastAiMoveDepth = depth-1
+            return k("Timeout, using depth="+(depth-1),consider)
+        },
+        (victory,avoidLoss) => {
+            s.lastAiMoveDepth = depth
+            if (victory.length > 0) {
+                return k("Victory",victory)
+            }
+            if (avoidLoss.length === 0) {
+                return k("Can't avoid loss", consider)
+            }
+            if (avoidLoss.length === 1) {
+                return k("Single move forced", avoidLoss)
+            }
+            const n = consider.length - avoidLoss.length
+            if (n > 0) {
+                console.log("Avoiding " + n + " places")
+            }
+            return pauseThen(0,() => {
+                return searchMoveDeepeningConsider(s,g,depth+1,avoidLoss,k)
+            })
+        }
+    )
 }
 
-function searchMoveDepthConsider(s,depth,consider) { //depth>=1
+function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
     const victory = []
     const avoidLoss = []
-    for (let i = 0; i < consider.length; i++) {
-        const m = consider[i]
-        s.movesConsidered ++
-        moveAtPosition(s,m)
-        const score = - scoreDepth(s,depth-1, 1)
-        undoLastMove(s)
-        if (score === 1) victory.push(m)
-        if (score === 0) avoidLoss.push(m)
+    const loop = i => {
+        if (i === consider.length) {
+            return k(victory,avoidLoss)
+        } else {
+            const m = consider[i]
+            s.movesConsidered ++
+            moveAtPosition(g,m)
+            return scoreDepth(s,g, depth-1, 1, stop, invScore => {
+                const score = - invScore
+                undoLastMove(g)
+                if (score === 1) victory.push(m)
+                if (score === 0) avoidLoss.push(m)
+                return loop(i+1)
+            })
+        }
     }
-    return [victory,avoidLoss]
+    return loop(0)
 }
 
-function scoreDepth(s,depth,cutoff) { //depth>=0
-    if (depth === 0 || gameOver(s)) {
-        return s.winByLastPlayer ? -1 : 0
+function scoreDepth(s,g,depth,cutoff,stop,k) { //depth>=0
+    if (depth === 0 || gameOver(g)) {
+        return k(g.winByLastPlayer ? -1 : 0)
     }
-    var best = -1
-    const all = allLegalMoves(s)
-    for (let i = 0; i < all.length; i++) {
+    const all = allLegalMoves(g)
+    const best = -1
+    const i = 0
+    return considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k)
+}
+
+function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
+    if (i === all.length) {
+        return k(best)
+    } else {
         const m = all[i]
         s.movesConsidered ++
-        moveAtPosition(s,m)
-        const score = - scoreDepth(s, depth-1, -best)
-        undoLastMove(s)
-        if (score >= cutoff) return score //prune
-        if (score > best) best = score
+        pauseMaybe(s,stop,() => {
+            moveAtPosition(g,m)
+            return scoreDepth(s,g, depth-1, -best, stop, invScore => {
+                const score = - invScore
+                undoLastMove(g)
+                if (score >= cutoff) return k(score) //alpha-beta prune here!
+                if (score > best) {
+                    const newBest = score
+                    return considerMovesScore(s,g,depth,cutoff,all,i+1,newBest,stop,k)
+                } else {
+                    return considerMovesScore(s,g,depth,cutoff,all,i+1,best,stop,k)
+                }
+            })
+        })
     }
-    return best
+}
+
+function pauseMaybe(s,stop,k) {
+    if (s.movesConsidered % 1000 === 0) {
+        return pauseThen(0,() => {
+            if (s.stop) {
+                return stop()
+            } else {
+                return k()
+            }
+        })
+    }
+    return k()
 }
 
 function newState() {
-    const hover = undefined
-    const nextPlayer = 1
-    const winByLastPlayer = false
-    const board = []
-    const moves = []
-    const player1isAI = false
-    const player2isAI = true
-    const strengthAI = initAIstrength
-    s = { hover, nextPlayer, winByLastPlayer, board, moves,
-          player1isAI, player2isAI, strengthAI
-        }
-    return s
+    return {
+        hover : undefined,
+        nextPlayer : 1,
+        winByLastPlayer : false ,
+        board : [],
+        moves : [],
+        player1isAI : false,
+        player2isAI : true,
+        timeLimitIndex : initTimeLimitIndex,
+        lastAiMoveDepth : 0
+    }
 }
 
 function resetState(s) {
     s.hover = undefined
     s.nextPlayer = 1
     s.winByLastPlayer = false
+    s.lastAiMoveDepth = 0
     s.moves = []
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -328,7 +405,7 @@ function playerKindName(isAI) {
 }
 
 function playerName(s,player) {
-    return 'Player-' + String(player)
+    return 'Player-' + player
 }
 
 function redrawStatus(s) {
@@ -345,8 +422,9 @@ function redrawStatus(s) {
         }
     } else {
         p.style.color = colourOfPlayer(nextPlayer)
-        p.textContent = (playerName(s,nextPlayer) + ' to move (' +
-                         playerKindName(isPlayerAI(s,nextPlayer)) + ')')
+        p.textContent = (playerName(s,nextPlayer) + ' to move'
+                         + ((isPlayerAI(s,nextPlayer)) ? ' (AI thinking...)' : '')
+                        )
     }
 }
 
@@ -374,24 +452,27 @@ function redrawMoveList(s) {
     }
 }
 
-function redrawAIstrength(s) {
-    const p = document.getElementById('Strength')
-    p.textContent = 'AI Strength = ' + String(s.strengthAI)
+function redrawTimeLimit(s) {
+    const limit = timeLimit(s)
+    document.getElementById('TimeLimit') .textContent = limit/1000 + 's'
+    document.getElementById('LastAiMoveDepth')
+        .textContent = (s.lastAiMoveDepth > 0)
+        ? 'Depth = ' + String(s.lastAiMoveDepth) : ''
 }
 
 function redrawPlayerInfo(s) {
     const p1 = document.getElementById('Player1')
     const p2 = document.getElementById('Player2')
-    p1.textContent = "P1 is " + playerKindName(s.player1isAI)
-    p2.textContent = "P2 is " + playerKindName(s.player2isAI)
+    p1.textContent = playerKindName(s.player1isAI)
+    p2.textContent = playerKindName(s.player2isAI)
 }
 
 function redraw(s) {
     const {hover, nextPlayer, board} = s
     redrawStatus(s)
-    redrawMoveList(s)
-    redrawAIstrength(s)
+    redrawTimeLimit(s)
     redrawPlayerInfo(s)
+    redrawMoveList(s)
     const finished = gameOver(s)
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {

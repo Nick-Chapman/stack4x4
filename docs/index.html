@@ -9,22 +9,26 @@
   </head>
   <body>
     <h1>Stack 4x4</h1>
-    <!-- <p>Play stack 4x4 in the browser <em>(TODO: AI)</em> </p> -->
     <h2>
-      <button id="Strength">Strength</button>
-      <div id="Status"></div>
-      <!-- Info: <span id="Info"></span> -->
+      Player-1 is <button id="Player1switch"><span id="Player1"></span></button>
+      Player-2 is <button id="Player2switch"><span id="Player2"></span></button>
+      <button id="SwitchPlayers">Switch Roles</button>
+    <h2>
+    <h2>
+      <span id="Status">Status</span>
+      <button id="StopAI"></button>
     </h2>
     <div id="GridTag"></div>
     <p>Moves: <span id="Moves"></span></p>
-    <p>
+    <h2>
+      AI Time Limit <button id="TimeLimit">1s</button>
+      <span id="LastAiMoveDepth"></span>
+    </h2>
+    <h2>
       <button id="NewGame">New Game</button>
       <button id="Undo">Undo</button>
       <button id="Undo2">Undo2</button>
-      <button id="SwitchPlayers">Switch AI/Human</span></button>
-      <button id="Player1switch"><span id="Player1"></span></button>
-      <button id="Player2switch"><span id="Player2"></span></button>
-    </p>
+    </h2>
     <p><a href="https://github.com/Nick-Chapman/stack4x4/">Find the code on github.</a></p>
   </body>
 </html>
