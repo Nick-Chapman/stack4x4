@@ -331,7 +331,7 @@ function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
 }
 
 function pauseMaybe(s,stop,k) {
-    if (s.movesConsidered % 1000 === 0) {
+    if (s.movesConsidered % 500 === 0) {
         return pauseThen(0,() => {
             if (s.stop) {
                 return stop()
