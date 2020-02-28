@@ -6,13 +6,17 @@ const light = 'rgb(160,160,160)'
 const purple = 'rgb(137,52,235)'
 const green = 'rgb(25,170,25)'
 
+const gold = 'rgb(255,255,0)'
+const blue = 'rgb(0,0,255)'
+const red = 'rgb(255,0,0)'
+
 const size = 8
 const winLineLength = 4
 
-const aiMoveHighlightTime = 100 // flash white circle
+const aiMoveHighlightTime = 100 // flash white/gold/red/blue circle(s)
 
-const timeLimits = [ 0, 300, 700, 1000, 2000, 3000, 5000, 8000, 13000, 21000, 34000 ]
-const initTimeLimitIndex = 3
+const timeLimits = [ 0, 1000, 2000, 3000, 5000, 8000, 13000, 21000, 34000 ]
+const initTimeLimitIndex = 1
 
 function timeLimit(s) {
     return timeLimits[s.timeLimitIndex]
@@ -109,14 +113,14 @@ function setupDOM(s) {
 
 function mouseOver(s,pos) { return function() {
     if (!s.aiRunning && !s.restoring) {
-        s.hover = pos
+        s.hover = [pos]
         redraw(s)
     }
 }}
 
 function mouseOut(s,pos) { return function() {
     if (!s.aiRunning && !s.restoring) {
-        s.hover = undefined
+        s.hover = []
         redraw(s)
     }
 }}
@@ -190,21 +194,52 @@ function maybeRunAI(s) {
                     s.stop = true
                 }
             },timeLimit(s))
-            chooseMoveAI(s,pos => {
+            chooseMoveAI(s,(rationaleColour,rationale,weighted) => {
+                const pos = randomWeightedPick(weighted)
+                console.log(s.movesConsidered, rationale, cellName(pos))
+                console.log(weighted.map(([p,w]) => cellName(p)+':'+w))
                 timeoutAlive = false
-                s.hover = pos
+                s.hoverColor = rationaleColour
+                s.hover = weighted.map(([p,_]) => p)
                 redraw(s)
                 pauseThen(aiMoveHighlightTime,() => {
-                    s.hover = undefined
-                    moveAtPosition(s,pos)
-                    s.aiRunning = false
-                    lockoutHuman(s,false)
-                    document.getElementById('StopAI').textContent = ''
-                    endOfInteraction(s)
+                    s.hover = [pos]
+                    redraw(s)
+                    pauseThen(2*aiMoveHighlightTime,() => {
+                        s.hover = []
+                        moveAtPosition(s,pos)
+                        s.aiRunning = false
+                        lockoutHuman(s,false)
+                        document.getElementById('StopAI').textContent = ''
+                        endOfInteraction(s)
+                    })
                 })
             })
         })
     }
+}
+
+function randomWeightedPick(weighted) {
+    const ws = weighted.map(([_,w]) => w)
+    const moves = weighted.map(([m,_]) => m)
+    function add(x,y) { return x + y }
+    const sum = ws.reduce(add,0)
+    const roll = random(sum)
+    var acc = 0
+    var index = 0
+    while(ws.length > 0) {
+        const w = ws.shift() // pop front array
+        acc += w
+        if (acc > roll) {
+            return moves[index]
+        }
+        index++
+    }
+    alert("randomWeightedPick: shouldn't reach here")
+}
+
+function random(number) {
+    return Math.floor(Math.random() * number);
 }
 
 function cloneBoardCells(b0) {
@@ -228,33 +263,7 @@ function chooseMoveAI(s,k) {
     g.board = cloneBoardCells(s.board) //array of mutable cells
     g.winByLastPlayer = s.winByLastPlayer
     s.movesConsidered = 0
-    return candidateMovesAI(s,g, (rationale,weighted) => {
-        console.log(s.movesConsidered, rationale, weighted.map(([p,w]) => cellName(p)+'-'+w))
-        return k(randomWeightedPick(weighted))
-    })
-}
-
-function randomWeightedPick(weighted) {
-    const ws = weighted.map(([_,w]) => w)
-    const moves = weighted.map(([m,_]) => m)
-    function add(x,y) { return x + y }
-    const sum = ws.reduce(add,0)
-    const roll = random(sum)
-    var acc = 0
-    var index = 0
-    while(ws) {
-        const w = ws.shift() // pop front array
-        acc += w
-        if (acc > roll) {
-            return moves[index]
-        }
-        index++
-    }
-    alert("randomWeightedPick: shouldn't reach here")
-}
-
-function random(number) {
-    return Math.floor(Math.random() * number);
+    return candidateMovesAI(s,g,k)
 }
 
 function candidateMovesAI(s,g,k) {
@@ -266,38 +275,43 @@ function candidateMovesAI(s,g,k) {
 
 function searchMoveDeepeningConsider(s,g,depth,consider,lastScored,k) { //depth>=1
     redraw(s)
-    console.log('AI depth ' + depth + '... [considering:' + consider.map(cellName) + ']')
+    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')' )
+    console.log('[consider:' + consider.map(cellName) + ']')
+    const stop = () => {
+        s.lastAiMoveDepth = depth-1
+        const cube = x => x*x*x
+        const scores = lastScored.map(([_,s]) => s)
+        function min(x,y) { return x < y ? x : y }
+        const worstScore = scores.reduce(min,win)
+        const weighted =
+              lastScored
+              .sort(([_,n1], [__,n2]) => n1-n2)
+              .reverse()
+              .map(([p,s]) => [p, cube(1 + s - worstScore)])
+              .slice(0,5) //restrict to best 5 moves
+        return k(white,"Timeout, using depth="+(depth-1),weighted)
+    }
     searchMoveDepthConsider(
-        s,g,depth,consider,
-        () => {
-            s.lastAiMoveDepth = depth-1
-            const cube = x => x*x*x
-            //const weighted = consider.map(p => [p,cube(scorePos(p))]) //OLD
-            const scores = lastScored.map(([_,s]) => s)
-            function min(x,y) { return x < y ? x : y }
-            const worstScore = scores.reduce(min,win)
-            const weighted = lastScored.map(([p,s]) => [p, cube(1 + s - worstScore)])
-            return k("Timeout, using depth="+(depth-1),weighted)
-        },
+        s,g,depth,consider,stop,
         (victory,avoidLoss,scored) => {
             //console.log('Victory:' + victory.map(cellName))
             //console.log('AvoidLoss:' + avoidLoss.map(cellName))
             //console.log('Scored:' + scored.map(([p,s]) => cellName(p) + '=' + s))
             s.lastAiMoveDepth = depth
             if (victory.length > 0) {
-                return k("Victory",victory.map(p => [p,1]))
+                return k(gold,"Victory",victory.map(p => [p,1]))
             }
             if (avoidLoss.length === 0) {
-                return k("Can't avoid loss", consider.map(p => [p,1]))
+                return k(red,"Can't avoid loss", consider.map(p => [p,1]))
             }
             if (avoidLoss.length === 1) {
-                return k("Single move forced", avoidLoss.map(p => [p,1]))
+                return k(blue,"Single move forced", avoidLoss.map(p => [p,1]))
             }
             const n = consider.length - avoidLoss.length
             if (n > 0) {
                 console.log("Avoiding " + n + " places")
             }
-            return pauseThen(0,() => {
+            return checkStop(s,stop,() => {
                 return searchMoveDeepeningConsider(s,g,depth+1,avoidLoss,scored,k)
             })
         }
@@ -354,7 +368,7 @@ function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
     } else {
         const m = all[i]
         s.movesConsidered ++
-        pauseMaybe(s,stop,() => {
+        checkStopMaybe(s,stop,() => {
             moveAtPosition(g,m)
             return scoreDepth(s,g, depth-1, -best, stop, invScore => {
                 const score = - invScore
@@ -371,22 +385,27 @@ function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
     }
 }
 
-function pauseMaybe(s,stop,k) {
-    if (s.movesConsidered % 500 === 0) {
-        return pauseThen(0,() => {
-            if (s.stop) {
-                return stop()
-            } else {
-                return k()
-            }
-        })
+function checkStopMaybe(s,stop,k) {
+    if (s.movesConsidered % 1000 === 0) {
+        return checkStop(s,stop,k)
     }
     return k()
 }
 
+function checkStop(s,stop,k) {
+    return pauseThen(0,() => {
+        if (s.stop) {
+            return stop()
+        } else {
+            return k()
+        }
+    })
+}
+
 function newState() {
     return {
-        hover : undefined,
+        hover : [],
+        hoverColor : white,
         nextPlayer : 1,
         winByLastPlayer : false ,
         board : [],
@@ -399,7 +418,7 @@ function newState() {
 }
 
 function resetState(s) {
-    s.hover = undefined
+    s.hover = []
     s.nextPlayer = 1
     s.winByLastPlayer = false
     s.lastAiMoveDepth = 0
@@ -539,10 +558,10 @@ function redraw(s) {
             if (cell.player === 0) {
                 if (!finished) {
                     if (isLegalMove(s,pos)) {
-                        if (hover && eqPos(pos,hover)) {
+                        if (posInList(pos,hover)) {
                             const col =
                                   isPlayerAI(s,nextPlayer)
-                                  ? white
+                                  ? s.hoverColor
                                   : colourOfPlayer(nextPlayer)
                             drawCircleSolid(ctx,col,4)
                         } else {
@@ -555,6 +574,16 @@ function redraw(s) {
             }
         }
     }
+}
+
+function posInList(pos,list) {
+    for(let i = 0; i < list.length ; i++) {
+        const elem = list[i]
+        if (eqPos(pos,elem)) {
+            return true
+        }
+    }
+    return false
 }
 
 function isPlayerAI(s,player) {
