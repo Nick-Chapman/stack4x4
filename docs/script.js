@@ -336,7 +336,7 @@ function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
             const m = consider[i]
             s.movesConsidered ++
             moveAtPosition(g,m)
-            return scoreDepth(s,g, depth-1, win, stop, invScore => {
+            return scoreDepth(s,g, depth-1, undefined, win, stop, (_km,invScore) => {
                 const score = - invScore
                 undoLastMove(g)
                 if (score === win) victory.push(m)
@@ -351,37 +351,47 @@ function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
     return loop(0)
 }
 
-function scoreDepth(s,g,depth,cutoff,stop,k) { //depth>=0
-    if (g.winByLastPlayer) return k(loss)
-    if (g.moves.length === size*size) return k(draw)
+function scoreDepth(s,g,depth,killerMove,cutoff,stop,k) { //depth>=0
+    if (g.winByLastPlayer) return k(undefined,loss)
+    if (g.moves.length === size*size) return k(undefined,draw)
     if (depth === 0) {
         //const score = 0 //no heuristic
         const score = scoreGameForCurrentPlayer(g) // heuristic
-        return k(score)
+        return k(undefined,score)
     }
-    const all = allLegalMoves(g)
-    const best = loss
-    const i = 0
-    return considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k)
+
+    if (killerMove) {
+        const all = allLegalMoves_withKiller(g,killerMove)
+        const best = loss
+        const i = 0
+        return considerMovesScore(s,g,depth,undefined,cutoff,all,i,best,stop,k)
+    } else {
+        const all = allLegalMoves(g)
+        const best = loss
+        const i = 0
+        return considerMovesScore(s,g,depth,undefined,cutoff,all,i,best,stop,k)
+    }
 }
 
-function considerMovesScore(s,g,depth,cutoff,all,i,best,stop,k) {
+function considerMovesScore(s,g,depth,killerMove,cutoff,all,i,best,stop,k) {
     if (i === all.length) {
-        return k(best)
+        return k(undefined,best)
     } else {
         const m = all[i]
         s.movesConsidered ++
         checkStopMaybe(s,stop,() => {
             moveAtPosition(g,m)
-            return scoreDepth(s,g, depth-1, -best, stop, invScore => {
+            return scoreDepth(s,g, depth-1, killerMove, -best, stop, (km,invScore) => {
                 const score = - invScore
                 undoLastMove(g)
-                if (score >= cutoff) return k(score) //alpha-beta prune here!
+                if (score >= cutoff) {
+                    return k(m,score) //alpha-beta prune here!
+                }
                 if (score > best) {
                     const newBest = score
-                    return considerMovesScore(s,g,depth,cutoff,all,i+1,newBest,stop,k)
+                    return considerMovesScore(s,g,depth,km,cutoff,all,i+1,newBest,stop,k)
                 } else {
-                    return considerMovesScore(s,g,depth,cutoff,all,i+1,best,stop,k)
+                    return considerMovesScore(s,g,depth,km,cutoff,all,i+1,best,stop,k)
                 }
             })
         })
@@ -678,6 +688,21 @@ function allLegalMoves(s) {
     for (let i = 0; i < size*size; i++) {
         const [pos,_] = all[i]
         if (isLegalMove(s,pos)) {
+            res.push(pos)
+        }
+    }
+    return res
+}
+
+function allLegalMoves_withKiller(s,killer) {
+    const res = []
+    if (isLegalMove(s,killer)) {
+        res.push(killer)
+    }
+    const all = allMoves_cached
+    for (let i = 0; i < size*size; i++) {
+        const [pos,_] = all[i]
+        if (isLegalMove(s,pos)) { //TODO: and not killer
             res.push(pos)
         }
     }
