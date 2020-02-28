@@ -656,7 +656,7 @@ function scorePos(pos) {
     return quartile[ii][jj]
 }
 
-function allMoves() { //TODO: cache this?
+function allMoves() {
     acc = []
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -669,11 +669,12 @@ function allMoves() { //TODO: cache this?
     return acc
 }
 
-//console.log(allMoves().map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
+const allMoves_cached = allMoves()
+//console.log(allMoves_cached.map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
 
 function allLegalMoves(s) {
     const res = []
-    const all = allMoves()
+    const all = allMoves_cached
     for (let i = 0; i < size*size; i++) {
         const [pos,_] = all[i]
         if (isLegalMove(s,pos)) {
