@@ -269,14 +269,19 @@ function chooseMoveAI(s,k) {
 function candidateMovesAI(s,g,k) {
     const all = allLegalMoves(g)
     s.stop = false
-    const scored = all.map(p => [p,1])
+    const scored = all.map(p => [p,scorePos(p)])
     return searchMoveDeepeningConsider(s,g,1,all,scored,k)
 }
 
-function searchMoveDeepeningConsider(s,g,depth,consider,lastScored,k) { //depth>=1
+function searchMoveDeepeningConsider(s,g,depth,no_consider,lastScored,k) { //depth>=1
     redraw(s)
-    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')' )
-    console.log('[consider:' + consider.map(cellName) + ']')
+    const sortedLastScored =
+          lastScored
+          .sort(([_,n1], [__,n2]) => n1-n2)
+          .reverse()
+    const considerOrdered = sortedLastScored.map(([p,s]) => p)
+    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')' +
+                '[consider:' + considerOrdered.map(cellName) + ']')
     const stop = () => {
         s.lastAiMoveDepth = depth-1
         const cube = x => x*x*x
@@ -284,15 +289,13 @@ function searchMoveDeepeningConsider(s,g,depth,consider,lastScored,k) { //depth>
         function min(x,y) { return x < y ? x : y }
         const worstScore = scores.reduce(min,win)
         const weighted =
-              lastScored
-              .sort(([_,n1], [__,n2]) => n1-n2)
-              .reverse()
+              sortedLastScored
               .map(([p,s]) => [p, cube(1 + s - worstScore)])
               .slice(0,5) //restrict to best 5 moves
         return k(white,"Timeout, using depth="+(depth-1),weighted)
     }
     searchMoveDepthConsider(
-        s,g,depth,consider,stop,
+        s,g,depth,considerOrdered,stop,
         (victory,avoidLoss,scored) => {
             //console.log('Victory:' + victory.map(cellName))
             //console.log('AvoidLoss:' + avoidLoss.map(cellName))
@@ -302,12 +305,12 @@ function searchMoveDeepeningConsider(s,g,depth,consider,lastScored,k) { //depth>
                 return k(gold,"Victory",victory.map(p => [p,1]))
             }
             if (avoidLoss.length === 0) {
-                return k(red,"Can't avoid loss", consider.map(p => [p,1]))
+                return k(red,"Can't avoid loss", considerOrdered.map(p => [p,1]))
             }
             if (avoidLoss.length === 1) {
                 return k(blue,"Single move forced", avoidLoss.map(p => [p,1]))
             }
-            const n = consider.length - avoidLoss.length
+            const n = considerOrdered.length - avoidLoss.length
             if (n > 0) {
                 console.log("Avoiding " + n + " places")
             }
