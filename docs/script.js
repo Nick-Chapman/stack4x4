@@ -198,6 +198,7 @@ function maybeRunAI(s) {
                 const pos = randomWeightedPick(weighted)
                 console.log(s.movesConsidered, rationale, cellName(pos))
                 console.log(weighted.map(([p,w]) => cellName(p)+':'+w))
+                s.lastAiConsidered = s.movesConsidered
                 timeoutAlive = false
                 s.hoverColor = rationaleColour
                 s.hover = weighted.map(([p,_]) => p)
@@ -280,10 +281,10 @@ function searchMoveDeepeningConsider(s,g,depth,no_consider,lastScored,k) { //dep
           .sort(([_,n1], [__,n2]) => n1-n2)
           .reverse()
     const considerOrdered = sortedLastScored.map(([p,s]) => p)
-    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')' +
-                '[consider:' + considerOrdered.map(cellName) + ']')
+    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')')
+                //'[consider:' + considerOrdered.map(cellName) + ']')
     const stop = () => {
-        s.lastAiMoveDepth = depth-1
+        s.lastAiDepth = depth-1
         const cube = x => x*x*x
         const scores = lastScored.map(([_,s]) => s)
         function min(x,y) { return x < y ? x : y }
@@ -300,7 +301,7 @@ function searchMoveDeepeningConsider(s,g,depth,no_consider,lastScored,k) { //dep
             //console.log('Victory:' + victory.map(cellName))
             //console.log('AvoidLoss:' + avoidLoss.map(cellName))
             //console.log('Scored:' + scored.map(([p,s]) => cellName(p) + '=' + s))
-            s.lastAiMoveDepth = depth
+            s.lastAiDepth = depth
             if (victory.length > 0) {
                 return k(gold,"Victory",victory.map(p => [p,1]))
             }
@@ -426,7 +427,8 @@ function newState() {
         player1isAI : false,
         player2isAI : true,
         timeLimitIndex : initTimeLimitIndex,
-        lastAiMoveDepth : 0
+        lastAiDepth : 0,
+        lastAiConsidered : 0
     }
 }
 
@@ -434,7 +436,7 @@ function resetState(s) {
     s.hover = []
     s.nextPlayer = 1
     s.winByLastPlayer = false
-    s.lastAiMoveDepth = 0
+    s.lastAiDepth = 0
     s.moves = []
     for(let i = 0; i < size ; i++) {
         for(let j = 0; j < size; j++) {
@@ -528,9 +530,10 @@ function redrawMoveList(s) {
 function redrawTimeLimit(s) {
     const limit = timeLimit(s)
     document.getElementById('TimeLimit') .textContent = limit/1000 + 's'
-    document.getElementById('LastAiMoveDepth')
-        .textContent = (s.lastAiMoveDepth > 0)
-        ? 'Depth = ' + String(s.lastAiMoveDepth) : ''
+    document.getElementById('LastAiDepth')
+        .textContent = (s.lastAiDepth > 0)
+        ? 'Depth = ' + String(s.lastAiDepth) : ''
+    document.getElementById('LastAiConsidered').textContent = '[' + String(s.lastAiConsidered) + ']'
     {
         const elem = document.getElementById('GameScore')
         const score = scoreGameForPlayer1(s)
