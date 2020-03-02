@@ -18,6 +18,8 @@ const aiMoveHighlightTime = 100 // flash white/gold/red/blue circle(s)
 const timeLimits = [ 0, 1000, 2000, 3000, 5000, 8000, 13000, 21000, 34000 ]
 const initTimeLimitIndex = 1
 
+const humanFirst = true
+
 function timeLimit(s) {
     return timeLimits[s.timeLimitIndex]
 }
@@ -27,13 +29,13 @@ function pauseThen(ms,f) {
 }
 
 function saveState(s) {
-    localStorage.setItem('SavedMoves',JSON.stringify(s.moves))
+    localStorage.setItem('NewSavedMoves',JSON.stringify(s.moves))
 }
 
 function init() {
     const s = newState()
     setupDOM(s)
-    const moves = JSON.parse(localStorage.getItem('SavedMoves'))
+    const moves = JSON.parse(localStorage.getItem('NewSavedMoves'))
     if (moves) {
         s.restoring = true
         lockoutHuman(s,true)
@@ -41,15 +43,15 @@ function init() {
     }
 }
 
-function restoreState(s,moves,i) {
-    if (i < moves.length) {
+function restoreState(s,moves,n) {
+    if (n < moves.length) {
         const totalDuration = 200 * Math.sqrt(moves.length)
         const duration = totalDuration / moves.length
         pauseThen(duration,() => {
-            const pos = moves[i]
+            const pos = moves[n]
             moveAtPosition(s,pos)
             redraw(s)
-            restoreState(s,moves,i+1)
+            restoreState(s,moves,n+1)
         })
     } else {
         s.restoring = false
@@ -64,8 +66,7 @@ const buttonsToDisable = ['NewGame','Undo','Undo2']
 // we call lockoutHuman when the AI is running or during initial restore
 // we disable the UI and mark that the AI is running
 function lockoutHuman(s,bool) {
-    for (let i = 0; i < buttonsToDisable.length; i++) {
-        const name = buttonsToDisable[i]
+    for (const name of buttonsToDisable) {
         document.getElementById(name).disabled = bool
     }
 }
@@ -82,31 +83,31 @@ function setupDOM(s) {
     document.getElementById('SwitchPlayers').onclick = switchBothPlayers(s)
     document.getElementById('StopAI').onclick = stopAI(s)
     gridTag = document.getElementById('GridTag')
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            const canvas = document.createElement('canvas')
-            gridTag.appendChild(canvas)
-            canvas.width = canvasSize
-            canvas.height = canvasSize
-            canvas.setAttribute('class','cell')
-            canvas.onclick = moveAtPositionAndUpdate(s,pos)
-            canvas.onmouseover = mouseOver(s,pos)
-            canvas.onmouseout = mouseOut(s,pos)
-            if ((i+j) % 2 === 0) {
-                canvas.style.backgroundColor = dark
-            } else {
-                canvas.style.backgroundColor = light
-            }
-            cell = { }
-            s.board[i*size+j] = cell
-            cell.player = 0;
-            cell.canvas = canvas
-            cell.ctx = canvas.getContext('2d')
+    for(let pos = 0; pos < size*size ; pos++) {
+        const [i,j] = positionCoords(pos)
+        const canvas = document.createElement('canvas')
+        gridTag.appendChild(canvas)
+        canvas.width = canvasSize
+        canvas.height = canvasSize
+        canvas.setAttribute('class','cell')
+        canvas.onclick = moveAtPositionAndUpdate(s,pos)
+        canvas.onmouseover = mouseOver(s,pos)
+        canvas.onmouseout = mouseOut(s)
+        if ((i+j) % 2 === 0) {
+            canvas.style.backgroundColor = dark
+        } else {
+            canvas.style.backgroundColor = light
         }
-        const lineBreak = document.createElement('div')
-        lineBreak.setAttribute('class','break')
-        gridTag.appendChild(lineBreak)
+        cell = { }
+        s.board[i*size+j] = cell
+        cell.player = 0;
+        cell.canvas = canvas
+        cell.ctx = canvas.getContext('2d')
+        if (j === 7) {
+            const lineBreak = document.createElement('div')
+            lineBreak.setAttribute('class','break')
+            gridTag.appendChild(lineBreak)
+        }
     }
     return s
 }
@@ -118,7 +119,7 @@ function mouseOver(s,pos) { return function() {
     }
 }}
 
-function mouseOut(s,pos) { return function() {
+function mouseOut(s) { return function() {
     if (!s.aiRunning && !s.restoring) {
         s.hover = []
         redraw(s)
@@ -260,8 +261,8 @@ function chooseMoveAI(s,k) {
     // TODO: Properly distiguish Game state from UI state
     g = {}
     g.nextPlayer = s.nextPlayer
-    g.moves = s.moves.slice(0) //array of immutable position objects
-    g.board = cloneBoardCells(s.board) //array of mutable cells
+    g.moves = s.moves.slice(0)
+    g.board = cloneBoardCells(s.board)
     g.winByLastPlayer = s.winByLastPlayer
     s.movesConsidered = 0
     return candidateMovesAI(s,g,k)
@@ -270,37 +271,33 @@ function chooseMoveAI(s,k) {
 function candidateMovesAI(s,g,k) {
     const all = allLegalMoves(g)
     s.stop = false
-    const scored = all.map(p => [p,scorePos(p)])
-    return searchMoveDeepeningConsider(s,g,1,all,scored,k)
+    const scored = all.map(p => [p,scorePosH1(p)])
+    return searchMoveDeepeningConsider(s,g,1,scored,k)
 }
 
-function searchMoveDeepeningConsider(s,g,depth,no_consider,lastScored,k) { //depth>=1
+function searchMoveDeepeningConsider(s,g,depth,scored,k) { //depth>=1
     redraw(s)
-    const sortedLastScored =
-          lastScored
+    const sortedScored =
+          scored
           .sort(([_,n1], [__,n2]) => n1-n2)
           .reverse()
-    const considerOrdered = sortedLastScored.map(([p,s]) => p)
-    console.log('AI depth ' + depth + '...(' + s.movesConsidered + ')')
-                //'[consider:' + considerOrdered.map(cellName) + ']')
+    const considerOrdered = sortedScored.map(([pos,_]) => pos)
+    console.log('AI depth ' + depth + '... [#' + considerOrdered.length + '] (' + s.movesConsidered + ')')
     const stop = () => {
         s.lastAiDepth = depth-1
         const cube = x => x*x*x
-        const scores = lastScored.map(([_,s]) => s)
+        const scores = scored.map(([_,s]) => s)
         function min(x,y) { return x < y ? x : y }
         const worstScore = scores.reduce(min,win)
         const weighted =
-              sortedLastScored
-              .map(([p,s]) => [p, cube(1 + s - worstScore)])
+              sortedScored
+              .map(([pos,s]) => [pos, cube(1 + s - worstScore)])
               .slice(0,5) //restrict to best 5 moves
         return k(white,"Timeout, using depth="+(depth-1),weighted)
     }
     searchMoveDepthConsider(
         s,g,depth,considerOrdered,stop,
-        (victory,avoidLoss,scored) => {
-            //console.log('Victory:' + victory.map(cellName))
-            //console.log('AvoidLoss:' + avoidLoss.map(cellName))
-            //console.log('Scored:' + scored.map(([p,s]) => cellName(p) + '=' + s))
+        (victory,avoidLoss,scoredAgain) => {
             s.lastAiDepth = depth
             if (victory.length > 0) {
                 return k(gold,"Victory",victory.map(p => [p,1]))
@@ -316,7 +313,7 @@ function searchMoveDeepeningConsider(s,g,depth,no_consider,lastScored,k) { //dep
                 console.log("Avoiding " + n + " places")
             }
             return checkStop(s,stop,() => {
-                return searchMoveDeepeningConsider(s,g,depth+1,avoidLoss,scored,k)
+                return searchMoveDeepeningConsider(s,g,depth+1,scoredAgain,k)
             })
         }
     )
@@ -334,16 +331,16 @@ function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
         if (i === consider.length) {
             return k(victory,avoidLoss,scored)
         } else {
-            const m = consider[i]
+            const pos = consider[i]
             s.movesConsidered ++
-            moveAtPosition(g,m)
+            moveAtPosition(g,pos)
             return scoreDepth(s,g, depth-1, undefined, win, stop, (_km,invScore) => {
                 const score = - invScore
                 undoLastMove(g)
-                if (score === win) victory.push(m)
+                if (score === win) victory.push(pos)
                 if (score > loss) {
-                    avoidLoss.push(m)
-                    scored.push([m,score]) //same length as avoidLoss
+                    avoidLoss.push(pos)
+                    scored.push([pos,score]) //same length as avoidLoss
                 }
                 return loop(i+1)
             })
@@ -352,7 +349,7 @@ function searchMoveDepthConsider(s,g,depth,consider,stop,k) { //depth>=1
     return loop(0)
 }
 
-function scoreDepth(s,g,depth,killerMove,cutoff,stop,k) { //depth>=0
+function scoreDepth(s,g,depth,killer,cutoff,stop,k) { //depth>=0
     if (g.winByLastPlayer) return k(undefined,loss)
     if (g.moves.length === size*size) return k(undefined,draw)
     if (depth === 0) {
@@ -361,8 +358,8 @@ function scoreDepth(s,g,depth,killerMove,cutoff,stop,k) { //depth>=0
         return k(undefined,score)
     }
 
-    if (killerMove) {
-        const all = allLegalMoves_withKiller(g,killerMove)
+    if (killer) {
+        const all = allLegalMoves_withKiller(g,killer)
         const best = loss
         const i = 0
         return considerMovesScore(s,g,depth,undefined,cutoff,all,i,best,stop,k)
@@ -374,19 +371,19 @@ function scoreDepth(s,g,depth,killerMove,cutoff,stop,k) { //depth>=0
     }
 }
 
-function considerMovesScore(s,g,depth,killerMove,cutoff,all,i,best,stop,k) {
+function considerMovesScore(s,g,depth,killer,cutoff,all,i,best,stop,k) {
     if (i === all.length) {
         return k(undefined,best)
     } else {
-        const m = all[i]
+        const pos = all[i]
         s.movesConsidered ++
         checkStopMaybe(s,stop,() => {
-            moveAtPosition(g,m)
-            return scoreDepth(s,g, depth-1, killerMove, -best, stop, (km,invScore) => {
+            moveAtPosition(g,pos)
+            return scoreDepth(s,g, depth-1, killer, -best, stop, (km,invScore) => {
                 const score = - invScore
                 undoLastMove(g)
                 if (score >= cutoff) {
-                    return k(m,score) //alpha-beta prune here!
+                    return k(pos,score) //alpha-beta prune here! passing back the killer move
                 }
                 if (score > best) {
                     const newBest = score
@@ -424,8 +421,8 @@ function newState() {
         winByLastPlayer : false ,
         board : [],
         moves : [],
-        player1isAI : false,
-        player2isAI : true,
+        player1isAI : !humanFirst,
+        player2isAI : humanFirst,
         timeLimitIndex : initTimeLimitIndex,
         lastAiDepth : 0,
         lastAiConsidered : 0
@@ -438,11 +435,8 @@ function resetState(s) {
     s.winByLastPlayer = false
     s.lastAiDepth = 0
     s.moves = []
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            cellAt(s,pos).player = 0
-        }
+    for(let pos = 0; pos < size*size ; pos++) {
+        cellAt(s,pos).player = 0
     }
 }
 
@@ -520,8 +514,7 @@ function redrawMoveList(s) {
     const p = document.getElementById('Moves')
     removeAllChildren(p)
     var player = 1
-    for (let i = 0; i < s.moves.length; i++) {
-        const pos = s.moves[i]
+    for (const pos of s.moves) {
         p.appendChild(createMoveText(player,pos))
         player = otherPlayer(player)
     }
@@ -558,44 +551,39 @@ function redrawPlayerInfo(s) {
 }
 
 function redraw(s) {
-    const {hover, nextPlayer, board} = s
     redrawStatus(s)
     redrawTimeLimit(s)
     redrawPlayerInfo(s)
     redrawMoveList(s)
     const finished = gameOver(s)
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            const cell = board[i*size+j]
-            const canvas = cell.canvas
-            const ctx = cell.ctx
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            if (cell.player === 0) {
-                if (!finished) {
-                    if (isLegalMove(s,pos)) {
-                        if (posInList(pos,hover)) {
-                            const col =
-                                  isPlayerAI(s,nextPlayer)
-                                  ? s.hoverColor
-                                  : colourOfPlayer(nextPlayer)
-                            drawCircleSolid(ctx,col,4)
-                        } else {
-                            drawCircleDashed(ctx,white,1)
-                        }
+    for(let pos = 0; pos < size*size ; pos++) {
+        const cell = s.board[pos]
+        const canvas = cell.canvas
+        const ctx = cell.ctx
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (cell.player === 0) {
+            if (!finished) {
+                if (isLegalMove(s,pos)) {
+                    if (posInList(pos,s.hover)) {
+                        const col =
+                              isPlayerAI(s,s.nextPlayer)
+                              ? s.hoverColor
+                              : colourOfPlayer(s.nextPlayer)
+                        drawCircleSolid(ctx,col,4)
+                    } else {
+                        drawCircleDashed(ctx,white,1)
                     }
                 }
-            } else {
-                drawPiece(ctx,colourOfPlayer(cell.player))
             }
+        } else {
+            drawPiece(ctx,colourOfPlayer(cell.player))
         }
     }
 }
 
 function posInList(pos,list) {
-    for(let i = 0; i < list.length ; i++) {
-        const elem = list[i]
-        if (eqPos(pos,elem)) {
+    for(const elem of list) {
+        if (pos === elem) {
             return true
         }
     }
@@ -644,13 +632,10 @@ function scoreGameForCurrentPlayer(s) {
 
 function scoreGameForPlayer1(s) {
     var acc = 0
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            const player = playerAt(s,pos)
-            if (player === 1) acc += scorePos(pos)
-            if (player === 2) acc -= scorePos(pos)
-        }
+    for(let pos = 0; pos < size*size ; pos++) {
+        const player = playerAt(s,pos)
+        if (player === 1) acc += scorePosH1(pos)
+        if (player === 2) acc -= scorePosH1(pos)
     }
     return acc
 }
@@ -662,32 +647,32 @@ const quartile = [
     [ 7, 10, 13, 16 ]
 ]
 
-function scorePos(pos) {
-    const [i,j] = pos
+//TODO: create full 4xquartile score info, as a single 64 long array, to be indexed by a (new)pos
+
+function scorePosH1(pos) { //heuristic-1
+    //const [i,j] = positionCoords(pos)
+    const i = Math.floor (pos / size)
+    const j = pos % size
     const ii = i<4 ? i : 7-i
     const jj = j<4 ? j : 7-j
     return quartile[ii][jj]
 }
 
-function allMoves() {
+function allMovesOrderedByH1() {
     acc = []
-    for(let i = 0; i < size ; i++) {
-        for(let j = 0; j < size; j++) {
-            const pos = [i,j]
-            const score = scorePos(pos)
-            acc.push([pos,score])
-        }
+    for(let pos = 0; pos < size*size ; pos++) {
+        const score = scorePosH1(pos)
+        acc.push([pos,score])
     }
     acc.sort(([_,n1], [__,n2]) => n1-n2).reverse()
     return acc
 }
 
-const allMoves_cached = allMoves()
-//console.log(allMoves_cached.map( ([[i,j],n]) => 'scoredPos(' + i + ',' + j + ')=' + n))
+const allMovesOrderedByH1_cached = allMovesOrderedByH1()
 
 function allLegalMoves(s) {
     const res = []
-    const all = allMoves_cached
+    const all = allMovesOrderedByH1_cached
     for (let i = 0; i < size*size; i++) {
         const [pos,_] = all[i]
         if (isLegalMove(s,pos)) {
@@ -702,7 +687,7 @@ function allLegalMoves_withKiller(s,killer) {
     if (isLegalMove(s,killer)) {
         res.push(killer)
     }
-    const all = allMoves_cached
+    const all = allMovesOrderedByH1_cached
     for (let i = 0; i < size*size; i++) {
         const [pos,_] = all[i]
         if (isLegalMove(s,pos)) { //TODO: and not killer
@@ -725,19 +710,21 @@ function empty(s,pos) {
 }
 
 function supported(s,pos) {
-    const [i,j] = pos
+    //const [i,j] = positionCoords(pos)
+    const i = Math.floor (pos / size)
+    const j = pos % size
     return (pillarX(s,0,i-1,j) || pillarX(s,i+1,size-1,j) ||
             pillarY(s,i,0,j-1) || pillarY(s,i,j+1,size-1))
 }
 
 function pillarX(s,x1,x2,y) {
     if (x1 > x2) return true
-    else return !empty(s,[x1,y]) && pillarX(s,x1+1,x2,y)
+    else return !empty(s,makePos(x1,y)) && pillarX(s,x1+1,x2,y)
 }
 
 function pillarY(s,x,y1,y2) {
     if (y1 > y2) return true
-    else return !empty(s,[x,y1]) && pillarY(s,x,y1+1,y2)
+    else return !empty(s,makePos(x,y1)) && pillarY(s,x,y1+1,y2)
 }
 
 function playerAt(s,pos) {
@@ -745,57 +732,46 @@ function playerAt(s,pos) {
 }
 
 function cellAt(s,pos) {
-    const [i,j] = pos
-    return s.board[i*size+j]
-}
-
-function cellName(pos) {
-    const [i,j] = pos
-    return String.fromCharCode(97 + j) + String(size-i)
+    return s.board[pos]
 }
 
 function isWinline(s,pos,player) {
-    return (isWinlineDir(s,pos,player,[0,1]) ||
-            isWinlineDir(s,pos,player,[1,0]) ||
-            isWinlineDir(s,pos,player,[1,1]) ||
-            isWinlineDir(s,pos,player,[1,-1]))
+    return (isWinlineDir(s,pos,player, 0, 1, 0,-1) ||
+            isWinlineDir(s,pos,player, 1, 0,-1, 0) ||
+            isWinlineDir(s,pos,player, 1, 1,-1,-1) ||
+            isWinlineDir(s,pos,player, 1,-1,-1, 1))
 }
 
-function isWinlineDir(s,pos,player,dir) {
-    const a = lengthPlayerLineDir(s,pos,player,dir)
-    const b = lengthPlayerLineDir(s,pos,player,oppositeDir(dir))
+function isWinlineDir(s,pos,player,di1,dj1,di2,dj2) {
+    const a = lengthPlayerLineDir(s,pos,player,di1,dj1)
+    const b = lengthPlayerLineDir(s,pos,player,di2,dj2)
     return 1+a+b >= winLineLength
 }
 
-function lengthPlayerLineDir(s,pos,player,dir) {
-    const pos2 = stepDir(pos,dir)
-    if (offBoard(pos2)) return 0
+function lengthPlayerLineDir(s,pos,player,di,dj) {
+    const i = Math.floor (pos / size)
+    const j = pos % size
+    if ((i===7 && di===1) || (i===0 && di===-1) || (j===7 && dj===1) || (j===0 && dj===-1)) return 0
+    const pos2 = makePos(i+di,j+dj)
     if (playerAt(s,pos2) === player)
-        return 1 + lengthPlayerLineDir(s,pos2,player,dir)
+        return 1 + lengthPlayerLineDir(s,pos2,player,di,dj)
     else
         return 0
 }
 
-function offBoard(pos) {
-    const [i,j] = pos
-    return i < 0 || i >= size || j < 0 || j >= size
+function makePos(i,j) {
+    return i*size + j
 }
 
-function oppositeDir(dir) {
-    const [di,dj] = dir
-    return [-di,-dj]
+function cellName(pos) {
+    const [i,j] = positionCoords(pos)
+    return String.fromCharCode(97 + j) + String(size-i)
 }
 
-function stepDir(pos,dir) {
-    const [i,j] = pos
-    const [di,dj] = dir
-    return [i+di,j+dj]
-}
-
-function eqPos(pos1,pos2) {
-    const [i1,j1] = pos1
-    const [i2,j2] = pos2
-    return i1===i2 && j1===j2
+function positionCoords(pos) { //TODO: avoid: creates tuples!
+    const i = Math.floor (pos / size)
+    const j = pos % size
+    return [i,j]
 }
 
 function otherPlayer(player) {
@@ -803,4 +779,3 @@ function otherPlayer(player) {
 }
 
 init()
-
