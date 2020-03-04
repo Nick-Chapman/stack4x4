@@ -41,6 +41,10 @@ button {
     position: absolute; right: 0;
 }
 
-#GameScore {
+#GameScoreH1 {
+    position: absolute; right: 0;
+}
+
+#GameScoreH2 {
     position: absolute; right: 0;
 }

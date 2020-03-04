@@ -20,6 +20,13 @@ const initTimeLimitIndex = 1
 
 const humanFirst = true
 
+const useH2 = true
+
+const scoreGameForPlayer1 =
+      useH2
+      ? scoreGameForPlayer1_H2
+      : scoreGameForPlayer1_H1
+
 function timeLimit(s) {
     return timeLimits[s.timeLimitIndex]
 }
@@ -195,10 +202,11 @@ function maybeRunAI(s) {
                     s.stop = true
                 }
             },timeLimit(s))
-            chooseMoveAI(s,(rationaleColour,rationale,weighted) => {
+            chooseMoveAI(s,(rationaleColour,rationale,weighted0) => {
+                const weighted = weighted0.slice(0,3) //random pick from best 3
                 const pos = randomWeightedPick(weighted)
+                console.log(weighted0.map(([p,w]) => cellName(p)+':'+w))
                 console.log(s.movesConsidered, rationale, cellName(pos))
-                console.log(weighted.map(([p,w]) => cellName(p)+':'+w))
                 s.lastAiConsidered = s.movesConsidered
                 timeoutAlive = false
                 s.hoverColor = rationaleColour
@@ -285,6 +293,7 @@ function searchMoveDeepeningConsider(s,g,depth,scored,k) { //depth>=1
     console.log('AI depth ' + depth + '... [#' + considerOrdered.length + '] (' + s.movesConsidered + ')')
     const stop = () => {
         s.lastAiDepth = depth-1
+
         const cube = x => x*x*x
         const scores = scored.map(([_,s]) => s)
         function min(x,y) { return x < y ? x : y }
@@ -292,7 +301,6 @@ function searchMoveDeepeningConsider(s,g,depth,scored,k) { //depth>=1
         const weighted =
               sortedScored
               .map(([pos,s]) => [pos, cube(1 + s - worstScore)])
-              .slice(0,5) //restrict to best 5 moves
         return k(white,"Timeout, using depth="+(depth-1),weighted)
     }
     searchMoveDepthConsider(
@@ -528,7 +536,7 @@ function redrawTimeLimit(s) {
         ? 'Depth = ' + String(s.lastAiDepth) : ''
     document.getElementById('LastAiConsidered').textContent = '[' + String(s.lastAiConsidered) + ']'
     {
-        const elem = document.getElementById('GameScore')
+        const elem = document.getElementById('GameScoreH1')
         const score = scoreGameForPlayer1(s)
         if (score === 0) {
             elem.textContent = '0'
@@ -540,6 +548,11 @@ function redrawTimeLimit(s) {
             elem.textContent = '+' + -score
             elem.style.color = green
         }
+    }
+    {
+        const elem = document.getElementById('GameScoreH2')
+        const tup = analyzeGameByH2(s)
+        elem.textContent = String(tup)
     }
 }
 
@@ -630,7 +643,7 @@ function scoreGameForCurrentPlayer(s) {
     alert("scoreGameForCurrentPlayer!")
 }
 
-function scoreGameForPlayer1(s) {
+function scoreGameForPlayer1_H1(s) {
     var acc = 0
     for(let pos = 0; pos < size*size ; pos++) {
         const player = playerAt(s,pos)
@@ -776,6 +789,100 @@ function positionCoords(pos) { //TODO: avoid: creates tuples!
 
 function otherPlayer(player) {
     return 3 - player
+}
+
+function setupLinesForH2() {
+    const lines = []
+    function add(pos,line) { lines[pos].push(line) }
+    for(let pos = 0; pos < size*size ; pos++) lines[pos] = []
+    let line = 0
+    for(let i = 0; i < size ; i++) { //0..7
+        for(let j = 0; j <= winLineLength; j++) { //0..4
+            for(let x = 0; x < winLineLength; x++) { //0..3
+                add(makePos(i,j+x),line)
+                add(makePos(j+x,i),line+1)
+            }
+            line+=2
+        }
+    }
+    for(let a = 0; a < winLineLength ; a++) { //0..3
+        for(let b = 0; b <= a; b++) {
+            for(let x = 0; x < winLineLength; x++) { //0..3
+                const i = b+x
+                const j = 3+a-b-x
+                const ii = size-1-i
+                const jj = size-1-j
+                add(makePos(i,j),line)
+                add(makePos(jj,i),line+1)
+                add(makePos(ii,jj),line+2)
+                add(makePos(j,ii),line+3)
+            }
+            line+=4
+        }
+    }
+    for(let a = 0; a <= winLineLength ; a++) { //0..4
+        for(let x = 0; x < winLineLength; x++) { //0..3
+                const i = a+x
+                const ii = size-1-i
+                add(makePos(i,ii),line)
+                add(makePos(i,i),line+1)
+            }
+        line+=2
+    }
+    return lines
+}
+
+const linesByPos = setupLinesForH2()
+
+
+function analyzeGameByH2(s) {
+    let pByLine = []
+    let gByLine = []
+    for(let x = 0; x<130; x++) {
+        pByLine[x] = 0
+        gByLine[x] = 0
+    }
+    for(let pos = 0; pos < size*size ; pos++) {
+        const player = playerAt(s,pos)
+        if (player === 1) {
+            for(const line of linesByPos[pos]) {
+                pByLine[line]++
+            }
+        }
+        if (player === 2) {
+            for(const line of linesByPos[pos]) {
+                gByLine[line]++
+            }
+        }
+    }
+    let u = 0 //unit
+    let a = 0 //A
+    let b = 0 //B
+    for(let x = 0; x<130; x++) {
+        const p = pByLine[x]
+        const g = gByLine[x]
+        if (g === 0) {
+            if      (p === 1) u++
+            else if (p === 2) a++
+            else if (p === 3) b++
+        }
+        if (p === 0) {
+            if      (g === 1) u--
+            else if (g === 2) a--
+            else if (g === 3) b--
+        }
+    }
+    return [u,a,b]
+}
+
+// heuristic parameters
+const A = 10
+const B = 20
+
+function scoreGameForPlayer1_H2(s) {
+    const [u,a,b] = analyzeGameByH2(s)
+    const res = u + A*a + B*b
+    return res
 }
 
 init()
