@@ -1,2 +1,5 @@
 *~
 .markdown-preview.html
+.stack-work
+*.cabal
+stack.yaml.lock
